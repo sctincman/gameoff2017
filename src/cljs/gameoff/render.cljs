@@ -1,13 +1,23 @@
 (ns gameoff.render
   (:require [cljsjs.three]
-            [reagent.core :as reagent]))
+            [reagent.core :as reagent]
+            [gameoff.signals :as signals]))
+
+(defn ^:export frames
+  "Returns a signal that triggers when a new frame needs to be rendered, with the value of the absolute time. CLJS uses `requestAnimationFrame`. The request id of the call is stored in the properties map atom as `:request-id`."
+  []
+  (let [out-signal (signals/signal (system-time) "frames")]
+    (letfn [(callback [time]
+              (signals/propagate out-signal time)
+              (let [request-id (.requestAnimationFrame js/window callback)]
+                (swap! (get out-signal :properties)
+                       assoc :request-id request-id)))]
+      (callback (system-time))
+      out-signal)))
 
 (def view-angle 75)
-
 (def aspect 1)
-
 (def near 0.1)
-
 (def far 1000)
 
 (defn create-renderer [element]
@@ -16,7 +26,7 @@
     (.setSize 500 500)))
 
 (defn reagent-renderer [attributes camera scene tick]
-  (let [requested-animation (atom nil)]
+  (let [frame-signal (frames)]
     (reagent/create-class
      {:display-name "threejs-canvas"
       :reagent-render
@@ -25,14 +35,16 @@
       :component-did-mount
       (fn threejs-canvas-did-mount [this]
         (let [e (reagent/dom-node this)
-              r (create-renderer e)]
-          ((fn animate []
-             (tick)
-             (.render r scene camera)
-             (reset! requested-animation (.requestAnimationFrame js/window animate))))))
+              r (create-renderer e)
+              world (signals/foldp (fn animate [state step]
+                                     (tick)
+                                     (.render r scene camera))
+                                   {}
+                                   frame-signal)]))
       :component-will-unmount
       (fn [this]
-        (.cancelAnimationFrame js/window @requested-animation))})))
+        (.cancelAnimationFrame js/window (get (deref (get frame-signal :properties))
+                                              :request-id)))})))
 
 (defn renderer [state]
 
