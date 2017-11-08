@@ -143,9 +143,9 @@
   ([] (tick 0.0))
   ([delay]
    (let [out-signal (signal (system-time) "time")]
-     (.setInterval js/window
-                   (fn [] (propagate out-signal (system-time)))
-                   delay)
+     (js/setInterval
+      (fn [] (propagate out-signal (system-time)))
+      delay)
      out-signal)))
 
 (defn ^:export switch
