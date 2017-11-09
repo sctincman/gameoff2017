@@ -28,17 +28,16 @@
   signal-atom
   {:inspect-data true})
 
-(defonce atom-signal
+(defonce backing-atom
   (let [a (atom 0)]
-    (assoc (signals/tick 500)
-           :value a)
+    (signals/foldp inc 0 (signals/tick 500) :backing-atom a)
     a))
 
 (defcard signal-watch2
   "Signal atom replaced"
   (fn [data-atom _]
-    @atom-signal)
-  atom-signal
+    @backing-atom)
+  backing-atom
   {:inspect-data true})
 
 (defonce observed-atom

@@ -25,13 +25,13 @@
 (defn ^:export signal
   "Creates a new, unbuffered `atom` based signal with an optional initial value (defaults to `nil`), and optional tag prefix."
   ([] (signal nil))
-  ([init] (signal (atom init) "signal_"))
-  ([init prefix] (->Signal (atom init) (keyword (gensym prefix)) (atom {}))))
+  ([init & {:keys [prefix backing-atom] :or {prefix "signal_" backing-atom (atom init)}}]
+   (->Signal backing-atom (keyword (gensym prefix)) (atom {}))))
 
 (defn ^:export fold
   "Transduction of input signal using transducer."
-  [xform in-signal]
-  (let [out-signal (signal nil "fold")
+  [xform in-signal & {:keys [backing-atom] :or {backing-atom (atom nil)}}]
+  (let [out-signal (signal nil :prefix "fold" :backing-atom backing-atom)
         f (xform
            (fn
              ([] out-signal)
@@ -50,8 +50,8 @@
 
 (defn ^:export foldp
   "Fold from past. Returns a new `Signal` that is the result of reduceing over an input `Signal` with the supplied function. `f` is a reducing function that takes 2 arguments: an accumulated state (current value of output `Signal`), and the current value of the input `Signal`. The return value becomes the new value of the output `Signal`.`init` is a starting value for the output `Signal`. `in-signal` is the input `Signal`. Returns the output `Signal`, allowing others to subscribe and consume from it."
-  [f init in-signal]
-  (let [out-signal (signal init "foldp")]
+  [f init in-signal & {:keys [backing-atom] :or {backing-atom (atom init)}}]
+  (let [out-signal (signal init :prefix "foldp" :backing-atom backing-atom)]
     (watch in-signal (:tag out-signal)
            (fn [target old-state new-state]
              (propagate out-signal (f (value out-signal) new-state))))
@@ -64,7 +64,7 @@
 (defn- map*
   [f in-signal]
   (let [init-val (f (value in-signal))
-        out-signal (signal init-val "map")]
+        out-signal (signal init-val :prefix "map")]
     (watch in-signal (:tag out-signal)
            (fn [target old-state new-state]
              (propagate out-signal (f new-state))))
@@ -73,8 +73,8 @@
 (defn ^:export split
   "Splits signal by `pred`. Returns two signals, one for values that pass, and one for those that fail. Return value is a map {:true true-signal, :false false-signal}, that can be destructured."
   [pred in-signal]
-  (let [true-signal (signal nil "split-true")
-        false-signal (signal nil "split-false")]
+  (let [true-signal (signal nil :prefix "split-true")
+        false-signal (signal nil :prefix "split-false")]
     (watch in-signal (:tag true-signal)
            (fn [target old-state new-state]
              (if (pred new-state)
@@ -84,7 +84,7 @@
 
 (defn- filter*
   [pred in-signal]
-  (let [out-signal (signal nil "filter")]
+  (let [out-signal (signal nil :prefix "filter")]
     (watch in-signal (:tag out-signal)
            (fn [target old-state new-state]
              (when (pred new-state)
@@ -96,7 +96,7 @@
   [input-signal & rest-args]
   (let [routes (map (fn [pred]
                       (when (fn? pred)
-                        {:signal (signal nil (str "route-" pred))
+                        {:signal (signal nil :prefix (str "route-" pred))
                          :pred pred}))
                     rest-args)]
     (watch input-signal (:tag (:signal (first routes)))
@@ -117,7 +117,7 @@
 (defn ^:export timed
   "Returns a signal that emits the time when the input-signal triggers."
   [trigger-signal]
-  (let [out-signal (signal (system-time) "timed")]
+  (let [out-signal (signal (system-time) :prefix "timed")]
     (watch trigger-signal (:tag out-signal)
            (fn [target old-state new-state]
              (propagate out-signal (system-time))))
@@ -126,7 +126,7 @@
 (defn ^:export delta-time
   "Returns a signal that emits the change in a time-signal."
   [time-signal]
-  (let [out-signal (signal 0.0 "delta-t")]
+  (let [out-signal (signal 0.0 :prefix "delta-t")]
     (watch time-signal (:tag out-signal)
            (fn [target old-state new-state]
              (propagate out-signal (- new-state old-state))))
@@ -142,7 +142,7 @@
   "Returns a signal that triggers every `delay` milliseconds. Defaults to 0 ms (as fast as possible). CLJS uses `setInterval` and is thus limited to a 10 ms minimum delay."
   ([] (tick 0.0))
   ([delay]
-   (let [out-signal (signal (system-time) "time")]
+   (let [out-signal (signal (system-time) :prefix "time")]
      (js/setInterval
       (fn [] (propagate out-signal (system-time)))
       delay)
@@ -152,7 +152,7 @@
   "Reverse route, switch on signal. Switch signal provides key for signal to watch"
   [switch-signal inputs]
   (let [init-switch (value switch-signal)
-        out-signal (signal init-switch "switch")]
+        out-signal (signal init-switch :prefix "switch")]
     (when (some? init-switch)
       (watch (get inputs init-switch) (:tag out-signal)
              (fn [target old new]

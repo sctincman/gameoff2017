@@ -18,17 +18,17 @@
       (fn threejs-canvas-did-mount [this]
         (let [e (reagent/dom-node this)
               state (render/init-renderer @state-atom e)
-              world (assoc (signals/foldp (fn animate [state step]
-                                           (let [mesh (get-in state [:backend :mesh])
-                                                 r (get-in state [:backend :renderer])
-                                                 scene (get-in state [:backend :scene])
-                                                 camera (get-in state [:backend :camera])]
-                                             (aset mesh "rotation" "y" (+ 0.01 (.-y (.-rotation mesh))))
-                                             (.render r scene camera)
-                                             state))
-                                         state
-                                         frame-signal)
-                          :value state-atom)]))
+              world (signals/foldp (fn animate [state step]
+                                     (let [mesh (get-in state [:backend :mesh])
+                                           r (get-in state [:backend :renderer])
+                                           scene (get-in state [:backend :scene])
+                                           camera (get-in state [:backend :camera])]
+                                       (aset mesh "rotation" "y" (+ 0.01 (.-y (.-rotation mesh))))
+                                       (.render r scene camera)
+                                       state))
+                                   (reset! state-atom state)
+                                   frame-signal
+                                   :backing-atom state-atom)]))
       :component-will-unmount
       (fn [this]
         (.cancelAnimationFrame js/window (get (deref (get frame-signal :properties))
