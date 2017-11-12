@@ -1,7 +1,7 @@
 (ns gameoff.cards
   (:require [reagent.core :as reagent :refer [atom]]
             [gameoff.core :as core]
-            [gameoff.render :as render]
+            [gameoff.render.core :as render]
             [gameoff.signals :as signals]
             [devcards.core :as dc])
   (:require-macros
@@ -18,7 +18,7 @@
   (let [a (atom 0)]
     (signals/map (fn [bah]
                    (reset! a bah))
-                 (signals/tick 500))
+                 (signals/tick 1000))
     a))
 
 (defcard signal-watch
@@ -29,8 +29,9 @@
   {:inspect-data true})
 
 (defonce backing-atom
-  (let [a (atom 0)]
-    (signals/foldp inc 0 (signals/tick 500) :backing-atom a)
+  (let [a (atom 0)
+        out (signals/signal 0 :backing-atom a)]
+    (signals/foldp inc 0 (signals/tick 1000) :out-signal out)
     a))
 
 (defcard signal-watch2

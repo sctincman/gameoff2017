@@ -2,13 +2,15 @@
     (:require [reagent.core :as reagent]
               [secretary.core :as secretary :include-macros true]
               [accountant.core :as accountant]
-              [gameoff.render :as render]
+              [gameoff.render.core :as render]
+              [gameoff.render.threejs.core :as render-backend]
               [gameoff.signals :as signals]))
 
 (defonce game-state (atom {}))
 
 (defn reagent-renderer [state-atom]
-  (let [frame-signal (render/frames)]
+  (let [frame-signal (render/frames)
+        world (signals/->Signal state-atom :world (atom {}))]
     (reagent/create-class
      {:display-name "threejs-canvas"
       :reagent-render
@@ -17,7 +19,7 @@
       :component-did-mount
       (fn threejs-canvas-did-mount [this]
         (let [e (reagent/dom-node this)
-              state (render/init-renderer @state-atom e)
+              backend (render-backend/init-renderer @state-atom e)
               world (signals/foldp (fn animate [state step]
                                      (let [mesh (get-in state [:backend :mesh])
                                            r (get-in state [:backend :renderer])
@@ -26,9 +28,9 @@
                                        (aset mesh "rotation" "y" (+ 0.01 (.-y (.-rotation mesh))))
                                        (.render r scene camera)
                                        state))
-                                   (reset! state-atom state)
+                                   (swap! state-atom assoc :backend backend )
                                    frame-signal
-                                   :backing-atom state-atom)]))
+                                   :out-signal world)]))
       :component-will-unmount
       (fn [this]
         (.cancelAnimationFrame js/window (get (deref (get frame-signal :properties))
