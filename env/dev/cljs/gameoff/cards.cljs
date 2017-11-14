@@ -3,6 +3,7 @@
             [gameoff.core :as core]
             [gameoff.render.core :as render]
             [gameoff.signals :as signals]
+            [gameoff.vector :as v]
             [devcards.core :as dc])
   (:require-macros
    [devcards.core
@@ -11,7 +12,11 @@
 
 (defcard-rg fresh-game
   (fn [game-state _] [core/reagent-renderer game-state])
-  (atom {})
+  (atom {:test-cube {:position v/zero
+                     :rotation v/zero
+                     :renders {:base {:type :cube
+                                      :geom :cube
+                                      :material :cube}}}})
   {:inspect-data true})
 
 (defonce signal-atom

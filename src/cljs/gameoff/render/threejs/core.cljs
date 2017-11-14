@@ -4,17 +4,6 @@
             [gameoff.render.threejs.texture :as texture]
             [cljsjs.three]))
 
-(defrecord ThreeJSRenderComponent [backend]
-  render/IRenderable
-  (prepare [this entity]
-    (when (some? (:position entity))
-      (set! (.-x (.-position (:object backend)))
-            (get-in entity [:position :x]))
-      (set! (.-y (.-position (:object backend)))
-            (get-in entity [:position :y]))
-      (set! (.-z (.-position (:object backend)))
-            (get-in entity [:position :z])))))
-
 (defn ^:export create-program [gl vertex-source fragment-source]
   (let [program (.createProgram gl)
         vertex-shader (.createShader gl (.-VERTEX_SHADER gl))
@@ -28,33 +17,59 @@
     (.linkProgram gl program)
     program))
 
+(defn- create-object
+  [id desc]
+  (let [geometry (js/THREE.BoxGeometry. 200 200 200)
+        material (js/THREE.MeshStandardMaterial. (js-obj "color" 0xbbbbbb "wireframe" true))
+        mesh (js/THREE.Mesh. geometry material)]
+    {:mesh mesh, :material material, :geometry geometry}))
+
+(defn- update-object
+  [parent desc {mesh :mesh}]
+  (when (some? (:position parent))
+    (set! (.-x (.-position mesh))
+          (get-in parent [:position :x]))
+    (set! (.-y (.-position mesh))
+          (get-in parent [:position :y]))
+    (set! (.-z (.-position mesh))
+          (get-in parent [:position :z])))
+  (when (some? (:rotation parent))
+    (set! (.-x (.-rotation mesh))
+          (get-in parent [:rotation :x]))
+    (set! (.-y (.-rotation mesh))
+          (get-in parent [:rotation :y]))
+    (set! (.-z (.-rotation mesh))
+          (get-in parent [:rotation :z]))))
+
 (defrecord ^:export ThreeJSBackend [renderer scene objects]
   render/IRenderBackend
-  (add-to-backend [this renderable]
-    (.add scene (get renderable :object))
-    renderable)
   (render [this entities camera]
-    (let [entities (doall (render/prepare-scene this (render/animate entities 0.0)))
-          cam (:object (first (:renders (get entities camera))))]
-      (.render renderer scene cam)
-      entities))
-  (prepare-scene [this entities]
-    (reduce-kv (fn [entities id entity]
-                 (when (render/renderable? entity)
-                   (loop [render (first (:renders entity))
-                          the-rest (rest (:renders entity))]
-                     (render/prepare render entity)
-                     (when-not (empty? the-rest)
-                       (recur (first the-rest) (rest the-rest)))))
-                 entities)
-               entities
-               entities))
-  (test-cube [this]
-    (let [geometry (js/THREE.BoxGeometry. 200 200 200)
-          material (js/THREE.MeshStandardMaterial. (js-obj "color" 0xff0040 "wireframe" false))
-          mesh (js/THREE.Mesh. geometry material)]
-      (.add scene mesh)
-      (->ThreeJSRenderComponent {:object mesh, :material material, :geometry geometry})))
+    (comment (let [cam (:object (first (:renders (get entities camera))))
+                   entities (doall (render/prepare-scene this (render/animate entities 0.0)))
+                   ]
+               (.render renderer scene cam)
+               entities)))
+  (renderx [this camera]
+    (fn [xform]
+      (fn
+        ([] (xform))
+        ([result]
+         (.render renderer scene camera)
+         (xform result))
+        ([result input]
+         (let [[id entity] (first input)]
+           (when (render/renderable? entity)
+             (loop [[render-id render] (first (:renders entity))
+                    the-rest (rest (:renders entity))]
+               (when-not (contains? @objects (keyword id render-id))
+                 (let [obj (create-object render-id render)]
+                   (.add scene (:mesh obj))
+                   (swap! objects assoc (keyword id render-id)
+                          obj)))
+               (update-object entity render (get @objects (keyword id render-id)))
+               (when-not (empty? the-rest)
+                 (recur (first the-rest) (rest the-rest))))))    
+         (xform result input)))))
   (create-sprite [this texture]
     (let [base-texture (if (satisfies? render/ITextureAtlas texture)
                          (:texture texture)
@@ -68,39 +83,7 @@
       (set! (.-x (.-scale sprite)) (:width base-texture))
       (set! (.-y (.-scale sprite)) (:height base-texture))
       (.add scene sprite)
-      (sprite/->ThreeJSSprite sprite texture nil 1.0 1.0)))
-  (create-sprite2 [this texture]
-    (let [vertices (js/Float32Array.
-                    [-0.5, -0.5,  0.0,
-                      0.5, -0.5,  0.0,
-                      0.5,  0.5,  0.0,
-                     -0.5,  0.5,  0.0])
-          uvs (js/Float32Array.
-               [0.0, 0.0,
-                1.0, 0.0,
-                1.0, 1.0,
-                0.0, 1.0])
-          indices (js/Uint16Array.
-                   [0, 1, 2,
-                    0, 2, 3])
-          base-texture (if (satisfies? render/ITextureAtlas texture)
-                         (:texture texture)
-                         texture)
-          js-texture (:texture base-texture)
-          geometry (js/THREE.BufferGeometry.)
-          material (js/THREE.MeshBasicMaterial.
-                    (js-obj "map" js-texture
-                            "wireframe" false
-                            "transparent" true))]
-      (.addAttribute geometry "position" (js/THREE.BufferAttribute. vertices 3))
-      (.addAttribute geometry "uv" (js/THREE.BufferAttribute. uvs 2))
-      (.setIndex geometry (js/THREE.BufferAttribute. indices 1))
-      (.computeBoundingBox geometry)
-      (let [mesh (js/THREE.Mesh. geometry material)]
-        (set! (.-x (.-scale mesh)) (:width base-texture))
-        (set! (.-y (.-scale mesh)) (:height base-texture))
-        (.add scene mesh)
-        (->ThreeJSRenderComponent {:object mesh, :material material, :geometry geometry})))))
+      (sprite/->ThreeJSSprite sprite texture nil 1.0 1.0))))
 
 (defn- create-renderer
   ([]
@@ -115,12 +98,6 @@
 (defn ^:export init-renderer
   [state canvas]
   (let [scene    (js/THREE.Scene.)
-        mat      (js/THREE.MeshBasicMaterial.
-                  (js-obj "color" 0xbbbbbb
-                          "wireframe" true))
-        box      (js/THREE.BoxGeometry.
-                  200 200 200)
-        mesh     (js/THREE.Mesh. box mat)
         p-camera (js/THREE.PerspectiveCamera.
                   75 1 0.1 1000)
         renderer (create-renderer canvas)
@@ -128,7 +105,6 @@
         ;light2 (js/THREE.PointLight. 0xffffff 2 0)
         backend  {:scene scene
                   :camera p-camera
-                  :mesh mesh
                   :renderer renderer}]
     
     (set! (.-background scene) (js/THREE.Color. 0x6c6c6c))
@@ -138,12 +114,9 @@
 
     (aset p-camera "name" "p-camera")
     (aset p-camera "position" "z" 500)
-    (aset mesh "rotation" "x" 45)
-    (aset mesh "rotation" "y" 0)
     (.add scene p-camera)
-    (.add scene mesh)
 
-    (assoc backend :obj (->ThreeJSBackend renderer scene []))))
+    (assoc backend :obj (->ThreeJSBackend renderer scene (atom {})))))
 
 (defn ^:export js-renderer
   ([state] (js-renderer state js/document.body))

@@ -30,16 +30,7 @@
       (set! (.-y (.-scale object)) (* value (:height sub)))
       (-> this
           (assoc scale-x value)
-          (assoc scale-y value))))
-  render/IRenderable
-  (prepare [this entity]
-    (when (some? (:position entity))
-      (set! (.-x (.-position (:object this)))
-            (get-in entity [:position :x]))
-      (set! (.-y (.-position (:object this)))
-            (get-in entity [:position :y]))
-      (set! (.-z (.-position (:object this)))
-            (get-in entity [:position :z])))))
+          (assoc scale-y value)))))
 
 (def sprite-vertex-shader
   "precision highp float;

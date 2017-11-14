@@ -13,9 +13,6 @@
     (callback (system-time))
     out-signal))
 
-(defprotocol ^:export IRenderable
-  (prepare [this entity] "Make any ugly backend mutations here"))
-
 (defprotocol ^:export ITexture
   "Abstract the details of a texture into this standard interface."
   (subtexture [this offset-x offset-y width height] "Returns a new texture that is a subsection of the parent.")
@@ -38,11 +35,8 @@
 (defprotocol ^:export IRenderBackend
   "Abstract the details of a backend into this standard interface."
   (render [this entities camera] "Using the list of entities, render and display the scene. Camera is the key of the camera entity to use for rendering.")
-  (add-to-backend [this renderable] "Ensure backend is aware of an entity's render-components. Eg for Three.js this does Scene.add(mesh).")
-  (prepare-scene [this entities] "Perform backend specific actions needed before rendering.")
-  (test-cube [this])
-  (create-sprite [this texture])
-  (create-sprite2 [this texture]))
+  (renderx [this camera] "A transducible render.")
+  (create-sprite [this texture]))
 
 (defprotocol ^:export ICamera
   "Abstract camera"
@@ -90,6 +84,6 @@
              entities))
 
 (defn renderable? [entity]
-  (and (:renders entity)
-       (pos? (count (:renders entity)))
-       (:position entity)))
+  (some? (and (:renders entity)
+              (pos? (count (:renders entity)))
+              (:position entity))))

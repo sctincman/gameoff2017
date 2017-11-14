@@ -4,9 +4,14 @@
               [accountant.core :as accountant]
               [gameoff.render.core :as render]
               [gameoff.render.threejs.core :as render-backend]
+              [gameoff.vector :as v]
               [gameoff.signals :as signals]))
 
-(defonce game-state (atom {}))
+(defonce game-state (atom {:test-cube {:position v/zero
+                                       :rotation v/zero
+                                       :renders [{:type :cube
+                                                  :geom :cube
+                                                  :material :cube}]}}))
 
 (defn reagent-renderer [state-atom]
   (let [frame-signal (render/frames)
@@ -20,17 +25,19 @@
       (fn threejs-canvas-did-mount [this]
         (let [e (reagent/dom-node this)
               backend (render-backend/init-renderer @state-atom e)
-              world (signals/foldp (fn animate [state step]
-                                     (let [mesh (get-in state [:backend :mesh])
-                                           r (get-in state [:backend :renderer])
-                                           scene (get-in state [:backend :scene])
-                                           camera (get-in state [:backend :camera])]
-                                       (aset mesh "rotation" "y" (+ 0.01 (.-y (.-rotation mesh))))
-                                       (.render r scene camera)
-                                       state))
-                                   (swap! state-atom assoc :backend backend )
-                                   frame-signal
-                                   :out-signal world)]))
+              worldbah (signals/foldp (fn animate [state step]
+                                        (into state
+                                              (comp
+                                               (map (fn [[id entity]]
+                                                      (if (= id :test-cube)
+                                                        {id (update-in entity [:rotation :y] + 0.01)}
+                                                        {id entity})))
+                                               (render/renderx (:obj backend)
+                                                               (:camera backend)))
+                                              state))
+                                      (swap! state-atom assoc :backend backend )
+                                      frame-signal
+                                      :out-signal world)]))
       :component-will-unmount
       (fn [this]
         (.cancelAnimationFrame js/window (get (deref (get frame-signal :properties))
