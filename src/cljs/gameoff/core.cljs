@@ -5,7 +5,9 @@
               [gameoff.render.core :as render]
               [gameoff.render.threejs.core :as render-backend]
               [gameoff.vector :as v]
-              [gameoff.signals :as signals]))
+              [gameoff.signals :as signals]
+              [gameoff.behavior :as behavior]
+              [gameoff.physics :as physics]))
 
 (defonce game-state (atom {:test-cube {:position v/zero
                                        :rotation v/zero
@@ -32,11 +34,13 @@
                                                       (if (= id :test-cube)
                                                         {id (update-in entity [:rotation :y] + 0.01)}
                                                         {id entity})))
+                                               (behavior/propagate step)
+                                               (physics/propagate step)
                                                (render/renderx (:obj backend)
                                                                (:camera backend)))
                                               state))
                                       (swap! state-atom assoc :backend backend )
-                                      frame-signal
+                                      (signals/dt frame-signal)
                                       :out-signal world)]))
       :component-will-unmount
       (fn [this]

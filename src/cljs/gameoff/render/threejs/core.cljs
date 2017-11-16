@@ -2,7 +2,9 @@
   (:require [gameoff.render.core :as render]
             [gameoff.render.threejs.sprite :as sprite]
             [gameoff.render.threejs.texture :as texture]
-            [cljsjs.three]))
+            [cljsjs.three]
+            [threejs.examples.loaders.mtl-loader]
+            [threejs.examples.loaders.obj-loader2]))
 
 (defn ^:export create-program [gl vertex-source fragment-source]
   (let [program (.createProgram gl)
@@ -17,15 +19,36 @@
     (.linkProgram gl program)
     program))
 
+(def obj-loader (js/THREE.OBJLoader2.))
+(def mtl-loader (js/THREE.MTLLoader.))
+
 (defn- create-object
-  [id desc]
-  (let [geometry (js/THREE.BoxGeometry. 200 200 200)
-        material (js/THREE.MeshStandardMaterial. (js-obj "color" 0xbbbbbb "wireframe" true))
-        mesh (js/THREE.Mesh. geometry material)]
-    {:mesh mesh, :material material, :geometry geometry}))
+  [backend id desc]
+  (if (= :obj (:type desc))
+    (when (string? (:material desc))
+      (let [pivot (js/THREE.Object3D.)]
+        (swap! (:objects backend) assoc id pivot)
+        (.add (:scene backend) pivot)
+        (.setPath mtl-loader (:path desc))
+        (.setCrossOrigin mtl-loader "anonymous")
+        (.load mtl-loader (:material desc)
+               (fn [materials]
+                 (.setSceneGraphBaseNode obj-loader pivot)
+                 (.preload materials)
+                 (.setMaterials obj-loader (aget materials "materials"))
+                 (.setPath obj-loader (:path desc))
+                 (.load obj-loader
+                        (:geom desc)
+                        (fn [event]
+                          event))))))
+    (let [geometry (js/THREE.BoxGeometry. 200 200 200)
+          material (js/THREE.MeshStandardMaterial. (js-obj "color" 0x0bbbbb "wireframe" false))
+          mesh (js/THREE.Mesh. geometry material)]
+      (.add (:scene backend) mesh)
+      (swap! (:objects backend) assoc id mesh))))
 
 (defn- update-object
-  [parent desc {mesh :mesh}]
+  [parent desc mesh]
   (when (some? (:position parent))
     (set! (.-x (.-position mesh))
           (get-in parent [:position :x]))
@@ -61,12 +84,10 @@
            (when (render/renderable? entity)
              (loop [[render-id render] (first (:renders entity))
                     the-rest (rest (:renders entity))]
-               (when-not (contains? @objects (keyword id render-id))
-                 (let [obj (create-object render-id render)]
-                   (.add scene (:mesh obj))
-                   (swap! objects assoc (keyword id render-id)
-                          obj)))
-               (update-object entity render (get @objects (keyword id render-id)))
+               (if (contains? @objects (keyword id render-id))
+                 (when-let [obj (get @objects (keyword id render-id))]
+                   (update-object entity render obj))
+                 (create-object this (keyword id render-id) render))
                (when-not (empty? the-rest)
                  (recur (first the-rest) (rest the-rest))))))    
          (xform result input)))))
@@ -101,16 +122,16 @@
         p-camera (js/THREE.PerspectiveCamera.
                   75 1 0.1 1000)
         renderer (create-renderer canvas)
-        ;light (js/THREE.AmbientLight. 0xffffff)
-        ;light2 (js/THREE.PointLight. 0xffffff 2 0)
+        light (js/THREE.AmbientLight. 0xffffff)
+        light2 (js/THREE.PointLight. 0xffffff 2 0)
         backend  {:scene scene
                   :camera p-camera
                   :renderer renderer}]
     
     (set! (.-background scene) (js/THREE.Color. 0x6c6c6c))
-    (comment (.add scene light))
-    (comment (.set (.-position light2) 300 300 400)
-             (.add scene light2))
+    (.add scene light)
+    (.set (.-position light2) 200 200 700)
+    (.add scene light2)
 
     (aset p-camera "name" "p-camera")
     (aset p-camera "position" "z" 500)

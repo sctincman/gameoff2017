@@ -3,6 +3,8 @@
             [gameoff.core :as core]
             [gameoff.render.core :as render]
             [gameoff.signals :as signals]
+            [gameoff.behavior :as behavior]
+            [gameoff.physics :as physics]
             [gameoff.vector :as v]
             [devcards.core :as dc])
   (:require-macros
@@ -10,13 +12,25 @@
     :as dc
     :refer [defcard defcard-doc defcard-rg deftest]]))
 
-(defcard-rg fresh-game
+(defcard-rg basic-cube
   (fn [game-state _] [core/reagent-renderer game-state])
   (atom {:test-cube {:position v/zero
                      :rotation v/zero
                      :renders {:base {:type :cube
                                       :geom :cube
                                       :material :cube}}}})
+  {:inspect-data true})
+
+(defcard-rg load-obj
+  (fn [game-state _] [core/reagent-renderer game-state])
+  (atom {:test-cube (-> {:position (v/vector 0 0 490)
+                         :rotation (v/vector 0 10 0)
+                         :renders {:base {:type :obj
+                                          :path "obj/fox/"
+                                          :geom "Fox.obj"
+                                          :material "Fox.mtl"}}}
+                        (behavior/player-movement {"w" :forward "s" :backward})
+                        (physics/body 1.0 0.005))})
   {:inspect-data true})
 
 (defonce signal-atom
