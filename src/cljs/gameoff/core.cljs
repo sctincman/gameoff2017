@@ -27,19 +27,28 @@
       (fn threejs-canvas-did-mount [this]
         (let [e (reagent/dom-node this)
               backend (render-backend/init-renderer @state-atom e)
+              scenes (if (some? (:include @state-atom))
+                       (render-backend/load-gltf (:include @state-atom))
+                       (atom {}))
+              bah    (swap! state-atom assoc :scenes scenes)
               worldbah (signals/foldp (fn animate [state step]
+                                        (when-let [bahscene (get-in @scenes [:Scene :root])]
+                                          (.add (:scene (:obj backend))
+                                                bahscene)
+                                          (swap! scenes assoc-in [:Scene :root] nil))
                                         (into state
                                               (comp
                                                (map (fn [[id entity]]
-                                                      (if (= id :test-cube)
-                                                        {id (update-in entity [:rotation :y] + 0.01)}
+                                                      (if (or (= id :test-cube)
+                                                              (= id :fox))
+                                                        {id (update-in entity [:rotation :y] - 0.01)}
                                                         {id entity})))
                                                (behavior/propagate step)
                                                (physics/propagate step)
                                                (render/renderx (:obj backend)
                                                                (:camera backend)))
                                               state))
-                                      (swap! state-atom assoc :backend backend )
+                                      (swap! state-atom assoc :backend backend)
                                       (signals/dt frame-signal)
                                       :out-signal world)]))
       :component-will-unmount

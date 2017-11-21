@@ -3,8 +3,9 @@
             [gameoff.render.threejs.sprite :as sprite]
             [gameoff.render.threejs.texture :as texture]
             [cljsjs.three]
-            [threejs.examples.loaders.mtl-loader]
-            [threejs.examples.loaders.obj-loader2]))
+            [cljsjs.three-examples.loaders.GLTFLoader]
+            [cljsjs.three-examples.loaders.MTLLoader]
+            [cljsjs.three-examples.loaders.OBJLoader2]))
 
 (defn ^:export create-program [gl vertex-source fragment-source]
   (let [program (.createProgram gl)
@@ -18,6 +19,30 @@
     (.attachShader gl program fragment-shader)
     (.linkProgram gl program)
     program))
+
+(defn ^:export load-gltf
+  [path]
+  (let [scenes (atom {})
+        gltf-loader (js/THREE.GLTFLoader.)]
+    (.load gltf-loader path
+           (fn [gltf]
+             (let [loaded-scenes
+                   (into {}
+                         (map (fn [scene]
+                                {(keyword (str (aget scene "name")))
+                                 {:root scene
+                                  :children
+                                  (into {}
+                                        (map (fn [child]
+                                               {(keyword (str (aget child "name")))
+                                                {:root child}})
+                                             (aget scene "children")))}})
+                              (aget gltf "scenes")))]
+               (println loaded-scenes)
+               (reset! scenes loaded-scenes)))
+           (fn [b] (println "prog"))
+           (fn [c] (println "err " c)))
+    scenes))
 
 (def obj-loader (js/THREE.OBJLoader2.))
 (def mtl-loader (js/THREE.MTLLoader.))
@@ -41,7 +66,7 @@
                         (:geom desc)
                         (fn [event]
                           event))))))
-    (let [geometry (js/THREE.BoxGeometry. 200 200 200)
+    (let [geometry (js/THREE.BoxGeometry. 2 2 2)
           material (js/THREE.MeshStandardMaterial. (js-obj "color" 0x0bbbbb "wireframe" false))
           mesh (js/THREE.Mesh. geometry material)]
       (.add (:scene backend) mesh)
@@ -134,7 +159,7 @@
     (.add scene light2)
 
     (aset p-camera "name" "p-camera")
-    (aset p-camera "position" "z" 500)
+    (aset p-camera "position" "z" 10)
     (.add scene p-camera)
 
     (assoc backend :obj (->ThreeJSBackend renderer scene (atom {})))))
