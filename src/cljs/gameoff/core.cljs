@@ -26,16 +26,10 @@
       :component-did-mount
       (fn threejs-canvas-did-mount [this]
         (let [e (reagent/dom-node this)
-              backend (render-backend/init-renderer @state-atom e)
-              scenes (if (some? (:include @state-atom))
-                       (render-backend/load-gltf (:include @state-atom))
-                       (atom {}))
-              bah    (swap! state-atom assoc :scenes scenes)
-              worldbah (signals/foldp (fn animate [state step]
-                                        (when-let [bahscene (get-in @scenes [:Scene :root])]
-                                          (.add (:scene (:obj backend))
-                                                bahscene)
-                                          (swap! scenes assoc-in [:Scene :root] nil))
+              backend (render-backend/setup-scene
+                       (render-backend/init-renderer e)
+                       @state-atom)
+              worldbah (signals/foldp (fn step-world [state step]
                                         (into state
                                               (comp
                                                (map (fn [[id entity]]
@@ -45,8 +39,10 @@
                                                         {id entity})))
                                                (behavior/propagate step)
                                                (physics/propagate step)
-                                               (render/renderx (:obj backend)
-                                                               (:camera backend)))
+                                               (render/renderx backend
+                                                               (get-in state [:scene :camera] :camera)
+                                                               (get-in state [:scene :current-scene] :default)
+                                                               step))
                                               state))
                                       (swap! state-atom assoc :backend backend)
                                       (signals/dt frame-signal)

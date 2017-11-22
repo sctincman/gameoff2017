@@ -21,75 +21,115 @@
     program))
 
 (defn ^:export load-gltf
-  [path]
-  (let [scenes (atom {})
+  [backend path]
+  (let [scenes (:scenes backend)
         gltf-loader (js/THREE.GLTFLoader.)]
     (.load gltf-loader path
            (fn [gltf]
-             (let [loaded-scenes
+             (let [cameras
+                   (into {}
+                         (map (fn [child]
+                                {(keyword (str (aget child "name")))
+                                 {:root child}})
+                              (aget gltf "cameras")))
+                   animations
+                   (into {}
+                         (map (fn [child]
+                                {(keyword (str (aget child "name")))
+                                 {:root child}})
+                              (aget gltf "animations")))
+                   loaded-scenes
                    (into {}
                          (map (fn [scene]
+                                (.add (aget scene "children" 0) (js/THREE.AmbientLight. 0xffffff))
                                 {(keyword (str (aget scene "name")))
-                                 {:root scene
+                                 {:root (aget scene "children" 0)
                                   :children
                                   (into {}
                                         (map (fn [child]
                                                {(keyword (str (aget child "name")))
                                                 {:root child}})
-                                             (aget scene "children")))}})
+                                             (aget scene "children" 0 "children")))}})
                               (aget gltf "scenes")))]
-               (println loaded-scenes)
-               (reset! scenes loaded-scenes)))
-           (fn [b] (println "prog"))
-           (fn [c] (println "err " c)))
-    scenes))
+               (swap! scenes (fn [scenes-map]
+                               (let [current-animations (:animations scenes-map)
+                                     current-cameras (:cameras scenes-map)
+                                     camera-holder (js/THREE.Object3D.)
+                                     camera (js/THREE.PerspectiveCamera.
+                                             75 1 0.1 1000)]
+                                 (aset camera "name" "camera")
+                                 (aset camera-holder "position" "z" 10)
+                                 (.add camera-holder camera)
+                                 (.add (get-in loaded-scenes [:Scene :root]) camera-holder)
+                                 (-> scenes-map
+                                     (assoc :animations (into animations current-animations))
+                                     (assoc :cameras (into cameras current-cameras))
+                                     (into loaded-scenes) ;for now, just overwrite, later try to do smart merge
+                                     (assoc-in [:Scene :children]
+                                               {:camera {:root camera-holder :children {}}})
+                                     ))))))
+           (fn [b] "Progress event")
+           (fn [c] (println "Failed to load " path)))
+    backend))
 
 (def obj-loader (js/THREE.OBJLoader2.))
 (def mtl-loader (js/THREE.MTLLoader.))
 
 (defn- create-object
-  [backend id desc]
-  (if (= :obj (:type desc))
-    (when (string? (:material desc))
-      (let [pivot (js/THREE.Object3D.)]
-        (swap! (:objects backend) assoc id pivot)
-        (.add (:scene backend) pivot)
-        (.setPath mtl-loader (:path desc))
-        (.setCrossOrigin mtl-loader "anonymous")
-        (.load mtl-loader (:material desc)
-               (fn [materials]
-                 (.setSceneGraphBaseNode obj-loader pivot)
-                 (.preload materials)
-                 (.setMaterials obj-loader (aget materials "materials"))
-                 (.setPath obj-loader (:path desc))
-                 (.load obj-loader
-                        (:geom desc)
-                        (fn [event]
-                          event))))))
-    (let [geometry (js/THREE.BoxGeometry. 2 2 2)
-          material (js/THREE.MeshStandardMaterial. (js-obj "color" 0x0bbbbb "wireframe" false))
-          mesh (js/THREE.Mesh. geometry material)]
-      (.add (:scene backend) mesh)
-      (swap! (:objects backend) assoc id mesh))))
+  [backend scene parent desc id]
+  (println "Creating object " desc)
+  (when-let [parent-root (get-in @(:scenes backend)
+                                 [scene :children parent :root])]
+    (if (= :obj (:type desc))
+      (when (string? (:material desc))
+        (let [pivot (js/THREE.Object3D.)]
+          (swap! (:scenes backend) assoc-in [scene :children parent :children id]
+                 {:root pivot :children {}})
+          (.add parent-root pivot)
+          (.setPath mtl-loader (:path desc))
+          (.setCrossOrigin mtl-loader "anonymous")
+          (.load mtl-loader (:material desc)
+                 (fn [materials]
+                   (.setSceneGraphBaseNode obj-loader pivot)
+                   (.preload materials)
+                   (.setMaterials obj-loader (aget materials "materials"))
+                   (.setPath obj-loader (:path desc))
+                   (.load obj-loader
+                          (:geom desc)
+                          (fn [event]
+                            event))))))
+      (let [geometry (js/THREE.BoxGeometry. 2 2 2)
+            material (js/THREE.MeshStandardMaterial. (js-obj "color" 0x0bbbbb "wireframe" false))
+            mesh (js/THREE.Mesh. geometry material)]
+        (aset mesh "name" (name id))
+        (.add parent-root mesh)
+        (swap! (:scenes backend) assoc-in [scene :children parent :children id]
+               {:root mesh :children {}})))))
 
 (defn- update-object
-  [parent desc mesh]
-  (when (some? (:position parent))
+  [entity mesh]
+  (comment (when (or (= "Fox" (aget mesh "name"))
+                     (= "Camera" (aget mesh "name")))
+             (println (aget mesh "position" "x")
+                      (aget mesh "position" "y")
+                      (aget mesh "position" "z"))))
+  (when (some? (:position entity))
     (set! (.-x (.-position mesh))
-          (get-in parent [:position :x]))
+          (get-in entity [:position :x]))
     (set! (.-y (.-position mesh))
-          (get-in parent [:position :y]))
+          (get-in entity [:position :y]))
     (set! (.-z (.-position mesh))
-          (get-in parent [:position :z])))
-  (when (some? (:rotation parent))
+          (get-in entity [:position :z])))
+  (when (some? (:rotation entity))
     (set! (.-x (.-rotation mesh))
-          (get-in parent [:rotation :x]))
+          (get-in entity [:rotation :x]))
     (set! (.-y (.-rotation mesh))
-          (get-in parent [:rotation :y]))
+          (get-in entity [:rotation :y]))
     (set! (.-z (.-rotation mesh))
-          (get-in parent [:rotation :z]))))
+          (get-in entity [:rotation :z])))
+  (.updateMatrix mesh))
 
-(defrecord ^:export ThreeJSBackend [renderer scene objects]
+(defrecord ^:export ThreeJSBackend [renderer scenes]
   render/IRenderBackend
   (render [this entities camera]
     (comment (let [cam (:object (first (:renders (get entities camera))))
@@ -97,39 +137,44 @@
                    ]
                (.render renderer scene cam)
                entities)))
-  (renderx [this camera]
-    (fn [xform]
-      (fn
-        ([] (xform))
-        ([result]
-         (.render renderer scene camera)
-         (xform result))
-        ([result input]
-         (let [[id entity] (first input)]
-           (when (render/renderable? entity)
-             (loop [[render-id render] (first (:renders entity))
-                    the-rest (rest (:renders entity))]
-               (if (contains? @objects (keyword id render-id))
-                 (when-let [obj (get @objects (keyword id render-id))]
-                   (update-object entity render obj))
-                 (create-object this (keyword id render-id) render))
-               (when-not (empty? the-rest)
-                 (recur (first the-rest) (rest the-rest))))))    
-         (xform result input)))))
-  (create-sprite [this texture]
-    (let [base-texture (if (satisfies? render/ITextureAtlas texture)
-                         (:texture texture)
-                         texture)
-          js-texture (:texture base-texture) 
-          material (js/THREE.SpriteMaterial.)
-          sprite (js/THREE.Sprite. material)]
-      (set! (.-map material) js-texture)
-      (set! (.-lights material) true)
-      (set! (.-needsUpdate material) true)
-      (set! (.-x (.-scale sprite)) (:width base-texture))
-      (set! (.-y (.-scale sprite)) (:height base-texture))
-      (.add scene sprite)
-      (sprite/->ThreeJSSprite sprite texture nil 1.0 1.0))))
+  (renderx [this camera scene delta-t]
+    (if-not (some? (get @scenes scene))
+      (map identity)
+      (fn [xform]
+        (fn
+          ([] (xform))
+          ([result]
+           ;; update all mixers
+           (.render renderer
+                    (get-in @scenes [scene :root])
+                    (aget (get-in @scenes [scene :children camera :root])
+                          "children" "0"))
+           (xform result))
+          ([result input]
+           (let [[id entity] (first input)]
+             (when (render/renderable? entity)
+               (when-not (contains? (get-in @scenes [scene :children]) id)
+                 (let [node (js/THREE.Object3D.)]
+                   (aset node "name" (name id))
+                   (.add (get-in @scenes [scene :root]) node)
+                   (swap! scenes assoc-in [scene :children id]
+                          {:root node
+                           :children {}})))
+               (when-let [obj (get-in @scenes [scene :children id :root])]
+                 ;; update animationclips/animationactions based on state
+                 (update-object entity obj))
+               (when-not (empty? (:renders entity))
+                 (loop [[render-id render-desc] (first (:renders entity))
+                        the-rest (rest (:renders entity))]
+                   (let [children (get-in @scenes [scene :children id :children])]
+                     (if (contains? children render-id)
+                       (when-let [obj (get-in children [render-id :root])]
+                         ;; update animationclips/animationactions based on state
+                         (update-object render-desc obj))
+                       (create-object this scene id render-desc render-id)))
+                   (when-not (empty? the-rest)
+                     (recur (first the-rest) (rest the-rest)))))))    
+           (xform result input)))))))
 
 (defn- create-renderer
   ([]
@@ -142,27 +187,35 @@
      (.setSize 500 500))))
 
 (defn ^:export init-renderer
-  [state canvas]
-  (let [scene    (js/THREE.Scene.)
-        p-camera (js/THREE.PerspectiveCamera.
-                  75 1 0.1 1000)
-        renderer (create-renderer canvas)
-        light (js/THREE.AmbientLight. 0xffffff)
-        light2 (js/THREE.PointLight. 0xffffff 2 0)
-        backend  {:scene scene
-                  :camera p-camera
-                  :renderer renderer}]
-    
-    (set! (.-background scene) (js/THREE.Color. 0x6c6c6c))
-    (.add scene light)
-    (.set (.-position light2) 200 200 700)
-    (.add scene light2)
+  [canvas]  
+  (->ThreeJSBackend (create-renderer canvas) (atom {})))
 
-    (aset p-camera "name" "p-camera")
-    (aset p-camera "position" "z" 10)
-    (.add scene p-camera)
-
-    (assoc backend :obj (->ThreeJSBackend renderer scene (atom {})))))
+(defn ^:export setup-scene
+  [backend state]
+  (if (some? (:include state))
+    (load-gltf backend (:include state))
+    (let [scene    (js/THREE.Scene.)
+          camera-holder (js/THREE.Object3D.)
+          camera (js/THREE.PerspectiveCamera.
+                    75 1 0.1 1000)
+          light (js/THREE.AmbientLight. 0xffffff)
+          light2 (js/THREE.PointLight. 0xffffff 2 0)]
+      (set! (.-background scene) (js/THREE.Color. 0x6c6c6c))
+      (.add scene light)
+      (.set (.-position light2) 200 200 700)
+      (.add scene light2)
+      (aset camera "name" "camera")
+      (aset camera "position" "z" 10)
+      (.add camera-holder camera)
+      (.add scene camera-holder)
+      (swap! (:scenes backend)
+             (fn [scenes-map]
+               (assoc scenes-map :default
+                      {:root scene
+                       :children
+                       {:sun {:root light}
+                        :camera {:root camera-holder}}})))
+      backend)))
 
 (defn ^:export js-renderer
   ([state] (js-renderer state js/document.body))

@@ -30,16 +30,26 @@
                                     :geom "Fox.obj"
                                     :material "Fox.mtl"}}}
                   (behavior/player-movement {"w" :forward "s" :backward})
-                  (physics/body 1.0 0.005))})
+                  (physics/body 1.0 0.005))
+         :camera (-> {:position (v/vector 0 0 20)
+                      :rotation (v/vector 0 0 0)
+                      :renders {}}
+                     (behavior/player-movement {"a" :forward "d" :backward})
+                     (physics/body 1.0 0.005))})
   {:inspect-data true})
 
 (defcard-rg load-scene
   (fn [game-state _] [core/reagent-renderer game-state])
   (atom {:include "gltf/fox.gltf"
-         :Fox (-> {:position (v/vector 0 0 490)
-                   :rotation (v/vector 0 10 0)}
+         :scene {:current-scene :Scene
+                 :camera :camera}
+         :Fox (-> {:position v/zero
+                   :rotation (v/vector 0 10 0)
+                   :renders {}}
                   (behavior/player-movement {"w" :forward "s" :backward})
-                  (physics/body 1.0 0.005))})
+                  (physics/body 1.0 0.005))
+         :camera {:position (v/vector 0 0 200)
+                  :renders {}}})
   {:inspect-data true})
 
 (defonce signal-atom
