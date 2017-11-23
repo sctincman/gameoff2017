@@ -26,6 +26,12 @@
         gltf-loader (js/THREE.GLTFLoader.)]
     (.load gltf-loader path
            (fn [gltf]
+             (doall (map (fn [scene]
+                           (println (aget scene "name") (aget scene "type"))
+                           (doall (map (fn [child]
+                                         (println (aget child "name") (aget child "type")))
+                                       (aget scene "children"))))
+                         (aget gltf "scenes")))
              (let [cameras
                    (into {}
                          (map (fn [child]
@@ -41,32 +47,27 @@
                    loaded-scenes
                    (into {}
                          (map (fn [scene]
-                                (.add (aget scene "children" 0) (js/THREE.AmbientLight. 0xffffff))
+                                (.add scene (js/THREE.AmbientLight. 0xffffff))
                                 {(keyword (str (aget scene "name")))
-                                 {:root (aget scene "children" 0)
+                                 {:root scene
                                   :children
                                   (into {}
                                         (map (fn [child]
                                                {(keyword (str (aget child "name")))
                                                 {:root child}})
-                                             (aget scene "children" 0 "children")))}})
+                                             (aget scene "children")))}})
                               (aget gltf "scenes")))]
+               (let [cam (aget (get-in loaded-scenes [:Scene :children :Camera :root])
+                               "children" 0 "children" 0)]
+                 (println (aget cam "name") (aget cam "type") (count (aget cam "children"))))
+               (println loaded-scenes)
                (swap! scenes (fn [scenes-map]
                                (let [current-animations (:animations scenes-map)
-                                     current-cameras (:cameras scenes-map)
-                                     camera-holder (js/THREE.Object3D.)
-                                     camera (js/THREE.PerspectiveCamera.
-                                             75 1 0.1 1000)]
-                                 (aset camera "name" "camera")
-                                 (aset camera-holder "position" "z" 10)
-                                 (.add camera-holder camera)
-                                 (.add (get-in loaded-scenes [:Scene :root]) camera-holder)
+                                     current-cameras (:cameras scenes-map)]
                                  (-> scenes-map
                                      (assoc :animations (into animations current-animations))
                                      (assoc :cameras (into cameras current-cameras))
                                      (into loaded-scenes) ;for now, just overwrite, later try to do smart merge
-                                     (assoc-in [:Scene :children]
-                                               {:camera {:root camera-holder :children {}}})
                                      ))))))
            (fn [b] "Progress event")
            (fn [c] (println "Failed to load " path)))
@@ -147,8 +148,7 @@
            ;; update all mixers
            (.render renderer
                     (get-in @scenes [scene :root])
-                    (aget (get-in @scenes [scene :children camera :root])
-                          "children" "0"))
+                    (get-in @scenes [:cameras camera :root]))
            (xform result))
           ([result input]
            (let [[id entity] (first input)]
@@ -195,7 +195,6 @@
   (if (some? (:include state))
     (load-gltf backend (:include state))
     (let [scene    (js/THREE.Scene.)
-          camera-holder (js/THREE.Object3D.)
           camera (js/THREE.PerspectiveCamera.
                     75 1 0.1 1000)
           light (js/THREE.AmbientLight. 0xffffff)
@@ -206,15 +205,17 @@
       (.add scene light2)
       (aset camera "name" "camera")
       (aset camera "position" "z" 10)
-      (.add camera-holder camera)
-      (.add scene camera-holder)
+      (.add scene camera)
       (swap! (:scenes backend)
              (fn [scenes-map]
-               (assoc scenes-map :default
-                      {:root scene
-                       :children
-                       {:sun {:root light}
-                        :camera {:root camera-holder}}})))
+               (-> scenes-map
+                   (assoc :default
+                          {:root scene
+                           :children
+                           {:sun {:root light}
+                            :camera {:root camera}}})
+                   (assoc :cameras
+                          {:camera {:root camera}}))))
       backend)))
 
 (defn ^:export js-renderer

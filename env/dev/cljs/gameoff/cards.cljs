@@ -42,7 +42,7 @@
   (fn [game-state _] [core/reagent-renderer game-state])
   (atom {:include "gltf/fox.gltf"
          :scene {:current-scene :Scene
-                 :camera :camera}
+                 :camera :Camera}
          :Fox (-> {:position v/zero
                    :rotation (v/vector 0 10 0)
                    :renders {}}
