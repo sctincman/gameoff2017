@@ -59,15 +59,21 @@
                    loaded-scenes
                    (into {}
                          (map (fn [scene]
-                                (.add scene (js/THREE.AmbientLight. 0xffffff))
-                                {(keyword (str (aget scene "name")))
-                                 {:root scene
-                                  :children
-                                  (into {}
-                                        (map (fn [child]
-                                               {(keyword (str (aget child "name")))
-                                                {:root child}})
-                                             (aget scene "children")))}})
+                                (let [mixer (js/THREE.AnimationMixer. scene)]
+                                  (doseq [[id {clip :root}] animations]
+                                    (println "Playing " (aget clip "name"))
+                                    (println "Duration " (aget clip "duration"))
+                                    (.play (.clipAction mixer clip)))
+                                  (.add scene (js/THREE.AmbientLight. 0xffffff))
+                                  {(keyword (str (aget scene "name")))
+                                   {:root scene
+                                    :mixer mixer
+                                    :children
+                                    (into {}
+                                          (map (fn [child]
+                                                 {(keyword (str (aget child "name")))
+                                                  {:root child}})
+                                               (aget scene "children")))}}))
                               (aget gltf "scenes")))]
                (swap! scenes (fn [scenes-map]
                                (let [current-animations (:animations scenes-map)
@@ -149,7 +155,7 @@
         (fn
           ([] (xform))
           ([result]
-           ;; update all mixers
+           (.update (get-in @scenes [scene :mixer]) (* 0.001 delta-t))
            (.render renderer
                     (get-in @scenes [scene :root])
                     (get-in @scenes [:cameras camera :root]))
@@ -220,6 +226,7 @@
                (-> scenes-map
                    (assoc :default
                           {:root scene
+                           :mixer (js/THREE.AnimationMixer.)
                            :children
                            {:sun {:root light}
                             :camera {:root camera}}})
