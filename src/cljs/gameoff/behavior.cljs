@@ -1,9 +1,54 @@
 (ns gameoff.behavior
   (:require [gameoff.signals :as s]
             [gameoff.input :as input]
-            [gameoff.vector :as v]))
+            [clojure.core.matrix :as m]))
 
 (defn- fsm-null [entity delta-t world])
+
+(defn ^:export fsm-stack []
+  )
+
+(defn ^:export rotation-fsm [command-signal]
+  (letfn [(enter-standing []
+            {:state :standing,
+             :transition standing
+             :update fsm-null})
+          (standing [state command]
+            (condp = command
+              :left (enter-rotating-left)
+              :right (enter-rotating-right)
+              state))
+          (standing-update [entity delta-t world]
+            entity)
+          
+          (enter-rotating-right []
+            {:state :rotating-right
+             :transition rotating-right
+             :update right-update})
+          (rotating-right [state command]
+            (condp = command
+              :left (enter-rotating-left)
+              :stop (enter-standing)
+              state))
+          (right-update [entity delta-t world]
+            entity)
+          
+          (enter-rotating-left []
+            {:state :rotating-left
+             :transition rotating-left
+             :update left-update})
+          (rotating-left [state command]
+            (condp = command
+              :down (enter-rotating-right)
+              :stop (enter-standing)
+              state))
+          (left-update [entity delta-t world]
+            entity)]
+
+    (s/foldp (fn [state command]
+               ((:transition state) state command))
+             {:state :standing, :transition standing}
+             command-signal)))
 
 (defn ^:export movement-fsm [command-signal]
   (letfn [(enter-standing []
@@ -61,27 +106,19 @@
         (assoc :input keymap)
         (assoc :movement (movement-fsm input-signal)))))
 
-(defn- patrol
-  [left right signal]
-  (fn [entity dt world]
-    (when (some? (:position entity))
-      (let [pos (:position entity)]
-        (when (< (:x pos) (:x left))
-          (s/propagate signal {:key :right, :press :down}))
-        (when (> (:x pos) (:x right))
-          (s/propagate signal {:key :left, :press :down}))))
-    entity))
-
-(defn ^:export add-patrol
-  "Simple AI. Cause them to walk back and forth"
-  [entity left right]
-  (let [command-signal (s/signal nil "patrol-ai")
-        bah (-> entity
-                (assoc :ai (patrol left right command-signal))
-                (assoc :movement (movement-fsm command-signal))
-                (assoc :bah command-signal))]
-    (s/propagate command-signal {:key :left, :press :down})
-    bah))
+(defn ^:export player-rotation
+  "Given a keymap and entity, add input-driven movement component to entity, and returns updated entity."
+  [entity keymap]
+  (let [input-signal (s/map (fn [event]
+                              (if-let [command (keymap (:key event))]
+                                (if (= :down (:press event))
+                                  command
+                                  :stop)))
+                            input/keyboard)]
+    ;; check if exists?
+    (-> entity
+        (assoc :input keymap)
+        (assoc :rotation (rotation-fsm input-signal)))))
 
 (defn ^:export behavioral? [entity]
   (some? (get entity :behaviors)))
@@ -114,7 +151,7 @@
       (if (and (some? (:position entity))
                (some? (:position followee)))
         ;;complicated behavior goes here
-        (assoc entity :position (v/add (:position followee)
+        (assoc entity :position (m/add (:position followee)
                                        offset))
         entity))))
 

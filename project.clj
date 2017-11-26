@@ -19,7 +19,8 @@
                  [venantius/accountant "0.2.0"
                   :exclusions [org.clojure/tools.reader]]
                  [cljsjs/three "0.0.87-0"]
-                 [cljsjs/three-examples "0.0.87-0"]]
+                 [cljsjs/three-examples "0.0.87-0"]
+                 [net.mikera/core.matrix "0.61.0"]]
 
   :plugins [[lein-environ "1.0.2"]
             [lein-cljsbuild "1.1.5"]

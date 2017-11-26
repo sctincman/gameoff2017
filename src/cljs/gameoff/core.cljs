@@ -4,7 +4,6 @@
               [accountant.core :as accountant]
               [gameoff.render.core :as render]
               [gameoff.render.threejs.core :as render-backend]
-              [gameoff.vector :as v]
               [gameoff.signals :as signals]
               [gameoff.behavior :as behavior]
               [gameoff.physics :as physics]))
@@ -13,13 +12,13 @@
   (atom {:include "gltf/fox.gltf"
          :scene {:current-scene :Scene
                  :camera :Camera}
-         :Fox (-> {:position v/zero
-                   :rotation (v/vector 0 10 0)
-                   :heading (v/vector 0 0 -1)
+         :Fox (-> {:position [0.0 0.0 0.0]
+                   :rotation [0.0 10.0 0.0]
+                   :heading [0.0 0.0 -1.0]
                    :renders {}}
                   (behavior/player-movement {"w" :forward "s" :backward})
                   (physics/body 1.0 0.005))
-         :camera {:position (v/vector 0 0 200)
+         :camera {:position [0.0 0.0 200.0]
                   :renders {}}}))
 
 (defn reagent-renderer [state-atom]
@@ -42,7 +41,7 @@
                                                (map (fn [[id entity]]
                                                       (if (or (= id :test-cube)
                                                               (= id :fox))
-                                                        {id (update-in entity [:rotation :y] - 0.01)}
+                                                        {id (update-in entity [:rotation 1] - 0.01)}
                                                         {id entity})))
                                                (behavior/propagate step)
                                                (physics/propagate step)
