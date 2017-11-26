@@ -9,11 +9,18 @@
               [gameoff.behavior :as behavior]
               [gameoff.physics :as physics]))
 
-(defonce game-state (atom {:test-cube {:position v/zero
-                                       :rotation v/zero
-                                       :renders [{:type :cube
-                                                  :geom :cube
-                                                  :material :cube}]}}))
+(defonce game-state
+  (atom {:include "gltf/fox.gltf"
+         :scene {:current-scene :Scene
+                 :camera :Camera}
+         :Fox (-> {:position v/zero
+                   :rotation (v/vector 0 10 0)
+                   :heading (v/vector 0 0 -1)
+                   :renders {}}
+                  (behavior/player-movement {"w" :forward "s" :backward})
+                  (physics/body 1.0 0.005))
+         :camera {:position (v/vector 0 0 200)
+                  :renders {}}}))
 
 (defn reagent-renderer [state-atom]
   (let [frame-signal (render/frames)
@@ -56,13 +63,8 @@
 ;; Views
 
 (defn home-page []
-  [:div [:h2 "Welcome to gameoff"]
-   [:div [:a {:href "/about"} "go to about page"]]
+  [:div [:h2 "Github Gameoff 2017"]
    [reagent-renderer game-state]])
-
-(defn about-page []
-  [:div [:h2 "About gameoff"]
-   [:div [:a {:href "/"} "go to the home page"]]])
 
 ;; -------------------------
 ;; Routes
@@ -74,9 +76,6 @@
 
 (secretary/defroute "/" []
   (reset! page #'home-page))
-
-(secretary/defroute "/about" []
-  (reset! page #'about-page))
 
 ;; -------------------------
 ;; Initialize app
