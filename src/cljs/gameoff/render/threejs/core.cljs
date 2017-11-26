@@ -20,18 +20,30 @@
     (.linkProgram gl program)
     program))
 
+(defn- resize-handler [backend]
+  (let [canvas (aget (:renderer backend) "domElement")
+        scenes (:scenes backend)]
+    (fn [event]
+      (println "Resize")
+      (let [width (aget canvas "parentElement" "offsetWidth")
+            height (aget canvas "parentElement" "offsetHeight")
+            aspect (/ width height)
+            cameras (map (fn [entry] (get (val entry) :root)) (get @scenes :cameras))]
+        (.setSize (:renderer backend) width height)
+        (when (pos? (count cameras))
+          (loop [camera (first cameras)
+                 the-rest (rest cameras)]
+            (aset camera "aspect" aspect)
+            (.updateProjectionMatrix camera)
+            (when (pos? (count the-rest))
+              (recur (first the-rest) (rest the-rest)))))))))
+
 (defn ^:export load-gltf
   [backend path]
   (let [scenes (:scenes backend)
         gltf-loader (js/THREE.GLTFLoader.)]
     (.load gltf-loader path
            (fn [gltf]
-             (doall (map (fn [scene]
-                           (println (aget scene "name") (aget scene "type"))
-                           (doall (map (fn [child]
-                                         (println (aget child "name") (aget child "type")))
-                                       (aget scene "children"))))
-                         (aget gltf "scenes")))
              (let [cameras
                    (into {}
                          (map (fn [child]
@@ -57,10 +69,6 @@
                                                 {:root child}})
                                              (aget scene "children")))}})
                               (aget gltf "scenes")))]
-               (let [cam (aget (get-in loaded-scenes [:Scene :children :Camera :root])
-                               "children" 0 "children" 0)]
-                 (println (aget cam "name") (aget cam "type") (count (aget cam "children"))))
-               (println loaded-scenes)
                (swap! scenes (fn [scenes-map]
                                (let [current-animations (:animations scenes-map)
                                      current-cameras (:cameras scenes-map)]
@@ -68,7 +76,8 @@
                                      (assoc :animations (into animations current-animations))
                                      (assoc :cameras (into cameras current-cameras))
                                      (into loaded-scenes) ;for now, just overwrite, later try to do smart merge
-                                     ))))))
+                                     ))))
+               ((resize-handler backend) nil)))
            (fn [b] "Progress event")
            (fn [c] (println "Failed to load " path)))
     backend))
@@ -109,11 +118,6 @@
 
 (defn- update-object
   [entity mesh]
-  (comment (when (or (= "Fox" (aget mesh "name"))
-                     (= "Camera" (aget mesh "name")))
-             (println (aget mesh "position" "x")
-                      (aget mesh "position" "y")
-                      (aget mesh "position" "z"))))
   (when (some? (:position entity))
     (set! (.-x (.-position mesh))
           (get-in entity [:position :x]))
@@ -178,17 +182,22 @@
 
 (defn- create-renderer
   ([]
-   (doto (js/THREE.WebGLRender. {:antialias true})
-     (.setPixelRatio js/window.devicePixelRatio)
-     (.setSize 500 500)))
+   (doto (js/THREE.WebGLRenderer. #js {:antialias true})
+     (.setPixelRatio js/window.devicePixelRatio)))
   ([element]
    (doto (js/THREE.WebGLRenderer. #js {:canvas element :antialias true})
-     (.setPixelRatio js/window.devicePixelRatio)
-     (.setSize 500 500))))
+     (.setPixelRatio js/window.devicePixelRatio))))
+
+(defn- on-ready [backend]
+  (fn [event]
+    (when (= "complete" (aget js/document "readyState"))
+      ((resize-handler backend) nil))))
 
 (defn ^:export init-renderer
   [canvas]  
-  (->ThreeJSBackend (create-renderer canvas) (atom {})))
+  (let [backend (->ThreeJSBackend (create-renderer canvas) (atom {}))]
+    (.addEventListener js/window "resize" (resize-handler backend))
+    backend))
 
 (defn ^:export setup-scene
   [backend state]
@@ -216,6 +225,8 @@
                             :camera {:root camera}}})
                    (assoc :cameras
                           {:camera {:root camera}}))))
+      (.addEventListener js/document "readystatechange" (on-ready backend))
+      ((resize-handler backend) nil)
       backend)))
 
 (defn ^:export js-renderer

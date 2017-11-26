@@ -22,7 +22,7 @@
      {:display-name "threejs-canvas"
       :reagent-render
       (fn threejs-canvas-render []
-        [:canvas])
+        [:canvas.gameview])
       :component-did-mount
       (fn threejs-canvas-did-mount [this]
         (let [e (reagent/dom-node this)

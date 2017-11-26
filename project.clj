@@ -1,6 +1,6 @@
 (defproject gameoff "0.1.0-SNAPSHOT"
   :description "FIXME: write description"
-  :url "http://example.com/FIXME"
+  :url "https://github.com/sctincman/gameoff2017/"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
@@ -113,7 +113,7 @@
                    :source-paths ["env/dev/clj"]
                    :plugins [[lein-figwheel "0.5.14"]
                              
-                             [lein-sassy "1.0.7"]]
+                             [lein-sassy "1.0.8"]]
 
                    :injections [(require 'pjstadig.humane-test-output)
                                 (pjstadig.humane-test-output/activate!)]
