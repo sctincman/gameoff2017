@@ -6,14 +6,17 @@
               [gameoff.render.threejs.core :as render-backend]
               [gameoff.signals :as signals]
               [gameoff.behavior :as behavior]
-              [gameoff.physics :as physics]))
+              [gameoff.physics :as physics]
+              [gameoff.quaternion :as q]))
+
+(def rotate-q (q/axis-angle->q [0 1 0] 0.2))
 
 (defonce game-state
   (atom {:include "gltf/fox.gltf"
          :scene {:current-scene :Scene
                  :camera :Camera}
          :Fox (-> {:position [0.0 0.0 0.0]
-                   :rotation [0.0 10.0 0.0]
+                   :rotation [0.0 0.0 0.0 1.0]
                    :heading [0.0 0.0 -1.0]
                    :renders {}}
                   (behavior/player-movement {"w" :forward "s" :backward})
@@ -41,7 +44,7 @@
                                                (map (fn [[id entity]]
                                                       (if (or (= id :test-cube)
                                                               (= id :fox))
-                                                        {id (update-in entity [:rotation 1] - 0.01)}
+                                                        {id (update entity :rotation q/qmul rotate-q)}
                                                         {id entity})))
                                                (behavior/propagate step)
                                                (physics/propagate step)

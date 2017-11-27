@@ -14,7 +14,7 @@
 (defcard-rg basic-cube
   (fn [game-state _] [core/reagent-renderer game-state])
   (atom {:test-cube {:position [0.0 0.0 0.0]
-                     :rotation [0.0 0.0 0.0]
+                     :rotation [0.0 0.0 0.0 1.0]
                      :renders {:base {:type :cube
                                       :geom :cube
                                       :material :cube}}}})
@@ -23,7 +23,7 @@
 (defcard-rg load-obj
   (fn [game-state _] [core/reagent-renderer game-state])
   (atom {:fox (-> {:position [0.0 0.0 0.0]
-                   :rotation [0.0 10.0 0.0]
+                   :rotation [0.0 0.0 0.0 1.0]
                    :renders {:base {:type :obj
                                     :path "obj/fox/"
                                     :geom "Fox.obj"
@@ -31,7 +31,7 @@
                   (behavior/player-movement {"w" :forward "s" :backward})
                   (physics/body 1.0 0.005))
          :camera (-> {:position [0.0 0.0 20.0]
-                      :rotation [0.0 0.0 0.0]
+                      :rotation [0.0 0.0 0.0 1.0]
                       :renders {}}
                      (behavior/player-movement {"a" :forward "d" :backward})
                      (physics/body 1.0 0.005))})
@@ -43,7 +43,7 @@
          :scene {:current-scene :Scene
                  :camera :Camera}
          :Fox (-> {:position [0.0 0.0 0.0]
-                   :rotation [0.0 10.0 0.0]
+                   :rotation [0.0 0.0 0.0 1.0]
                    :renders {}}
                   (behavior/player-movement {"w" :forward "s" :backward})
                   (physics/body 1.0 0.005))

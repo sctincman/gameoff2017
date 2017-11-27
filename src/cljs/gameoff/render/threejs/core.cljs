@@ -124,20 +124,10 @@
 
 (defn- update-object
   [entity mesh]
-  (when (some? (:position entity))
-    (set! (.-x (.-position mesh))
-          (get-in entity [:position 0]))
-    (set! (.-y (.-position mesh))
-          (get-in entity [:position 1]))
-    (set! (.-z (.-position mesh))
-          (get-in entity [:position 2])))
-  (when (some? (:rotation entity))
-    (set! (.-x (.-rotation mesh))
-          (get-in entity [:rotation 0]))
-    (set! (.-y (.-rotation mesh))
-          (get-in entity [:rotation 1]))
-    (set! (.-z (.-rotation mesh))
-          (get-in entity [:rotation 2])))
+  (when-let [[x y z] (:position entity)]
+    (.set (.-position mesh) x y z))
+  (when-let [[x y z w] (:rotation entity)]
+    (.set (.-quaternion mesh) x y z w))
   (.updateMatrix mesh))
 
 (defrecord ^:export ThreeJSBackend [renderer scenes]
