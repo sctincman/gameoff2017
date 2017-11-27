@@ -59,12 +59,16 @@
                    loaded-scenes
                    (into {}
                          (map (fn [scene]
-                                (let [mixer (js/THREE.AnimationMixer. scene)]
+                                (let [mixer (js/THREE.AnimationMixer. scene)
+                                      light2 (js/THREE.PointLight. 0xffffff 2 0)]
                                   (doseq [[id {clip :root}] animations]
                                     (println "Playing " (aget clip "name"))
                                     (println "Duration " (aget clip "duration"))
                                     (.play (.clipAction mixer clip)))
                                   (.add scene (js/THREE.AmbientLight. 0xffffff))
+                                  (.set (.-position light2) 200 200 700)
+                                  (.add scene light2)
+                                  (set! (.-background scene) (js/THREE.Color. 0x6c6c6c))
                                   {(keyword (str (aget scene "name")))
                                    {:root scene
                                     :mixer mixer

@@ -41,14 +41,19 @@
   (fn [game-state _] [core/reagent-renderer game-state])
   (atom {:include "gltf/fox.gltf"
          :scene {:current-scene :Scene
-                 :camera :Camera}
+                 :camera :PlayerCamera}
          :Fox (-> {:position [0.0 0.0 0.0]
                    :rotation [0.0 0.0 0.0 1.0]
                    :renders {}}
-                  (behavior/player-movement {"w" :forward "s" :backward})
-                  (physics/body 1.0 0.005))
-         :camera {:position [0.0 0.0 200.0]
-                  :renders {}}})
+                  (behavior/player-movement
+                   {"w" :forward
+                    "s" :backward
+                    "a" :left
+                    "d" :right
+                    "q" :turn-left
+                    "e" :turn-right})
+                  (behavior/moveable)
+                  (physics/body 1.0 0.005))})
   {:inspect-data true})
 
 (defonce signal-atom

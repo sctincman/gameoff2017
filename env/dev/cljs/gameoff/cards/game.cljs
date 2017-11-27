@@ -11,17 +11,23 @@
     :as dc
     :refer [defcard defcard-doc defcard-rg deftest]]))
 
+(defonce game-state   (atom {:include "gltf/scene.gltf"
+                             :scene {:current-scene :Scene
+                                     :camera :PlayerCamera}
+                             :Fox (-> {:position [0.0 0.0 0.0]
+                                       :rotation [0.0 0.0 0.0 1.0]
+                                       :renders {}}
+                                      (behavior/player-movement
+                                       {"w" :forward
+                                        "s" :backward
+                                        "a" :left
+                                        "d" :right
+                                        "q" :turn-left
+                                        "e" :turn-right})
+                                      (behavior/moveable)
+                                      (physics/body 1.0 0.005))}))
+
 (defcard-rg load-scene
   (fn [game-state _] [core/reagent-renderer game-state])
-  (atom {:include "gltf/fox.gltf"
-         :scene {:current-scene :Scene
-                 :camera :Camera}
-         :Fox (-> {:position [0.0 0.0 0.0]
-                   :rotation [0.0 0.0 0.0 1.0]
-                   :renders {}}
-                  (behavior/player-movement {"w" :forward "s" :backward})
-                  (behavior/moveable)
-                  (physics/body 1.0 0.005))
-         :camera {:position [0.0 0.0 200.0]
-                  :renders {}}})
+  game-state
   {:inspect-data true})
