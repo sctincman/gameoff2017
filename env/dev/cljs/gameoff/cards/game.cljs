@@ -17,9 +17,10 @@
          :scene {:current-scene :Scene
                  :camera :Camera}
          :Fox (-> {:position [0.0 0.0 0.0]
-                   :rotation [0.0 10.0 0.0]
+                   :rotation [0.0 0.0 0.0 1.0]
                    :renders {}}
                   (behavior/player-movement {"w" :forward "s" :backward})
+                  (behavior/moveable)
                   (physics/body 1.0 0.005))
          :camera {:position [0.0 0.0 200.0]
                   :renders {}}})

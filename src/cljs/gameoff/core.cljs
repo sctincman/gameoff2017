@@ -17,7 +17,7 @@
                  :camera :Camera}
          :Fox (-> {:position [0.0 0.0 0.0]
                    :rotation [0.0 0.0 0.0 1.0]
-                   :heading [0.0 0.0 -1.0]
+                   :heading [0.0 0.0 1.0]
                    :renders {}}
                   (behavior/player-movement {"w" :forward "s" :backward})
                   (physics/body 1.0 0.005))

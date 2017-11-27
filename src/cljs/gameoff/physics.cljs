@@ -2,24 +2,11 @@
   (:require [gameoff.signals :as s]
             [clojure.core.matrix :as m]))
 
-(defrecord ^:export BodyComponent [velocity acceleration])
+(defrecord ^:export BodyComponent [mass velocities accelerations])
 
 ;;hmm body will need all forces, not just movement, hack for just movement now
 (defn ^:export body [entity mass speed]
-  (let [movement-state (:movement entity)
-        roation-state (:rotation entity)
-        velocity-signal (s/foldp (fn [velocity movement]
-                                   (let [heading [1.0 0.0 0.0]]
-                                     (condp = (:state movement)
-                                       :moving-forward (m/mmul speed heading)
-                                       :moving-backward (m/mmul (- speed) heading)
-                                       :standing [0.0 0.0 0.0]
-                                       nil velocity)))
-                                 [0.0 0.0 0.0]
-                                 movement-state)
-        acceleration-signal (s/signal [0.0 0.0 0.0] "accel")]
-    (assoc entity :body
-           (->BodyComponent velocity-signal acceleration-signal))))
+  (assoc entity :body (->BodyComponent mass {:forces [0 0 0]} {:forces [0 0 0]})))
 
 
 ;;have body listen to a forces signal
@@ -29,20 +16,25 @@
        (:position entity)))
 
 (defn accelerate [body delta-t]
-  (s/propagate (get-in body [:body :velocity])
-               (m/add (s/value (get-in body [:body :velocity]))
-                      (m/mmul delta-t
-                             (s/value (get-in body [:body :acceleration])))))
-  body)
+  (let [acceleration (reduce m/add [0 0 0]
+                             (vals (get-in body [:body :accelerations])))]    
+    (update-in body [:body :velocities]
+               (fn [velocities]
+                 (update velocities :forces
+                         m/add
+                         (m/mmul delta-t acceleration))))))
+
+(defn velocitate [body delta-t]
+  (let [velocity (reduce m/add [0 0 0]
+                         (vals (get-in body[:body :velocities])))]    
+    (update-in body [:position] m/add (m/mmul delta-t velocity))))
 
 (defn propagate
   ([body delta-t]
    (if (physical? body)
      (-> body
-         (update :position
-                 m/add
-                 (m/mmul delta-t (s/value (get-in body [:body :velocity]))))
-         (accelerate delta-t))
+         (accelerate delta-t)
+         (velocitate delta-t))
      body))
   ([delta-t]
    (fn [xform]
