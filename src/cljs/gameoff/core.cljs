@@ -12,17 +12,26 @@
 (def rotate-q (q/axis-angle->q [0 1 0] 0.2))
 
 (defonce game-state
-  (atom {:include "gltf/fox.gltf"
+  (atom {:include "gltf/scene.gltf"
          :scene {:current-scene :Scene
-                 :camera :Camera}
-         :Fox (-> {:position [0.0 0.0 0.0]
-                   :rotation [0.0 0.0 0.0 1.0]
-                   :heading [0.0 0.0 1.0]
+                 :camera :PlayerCamera}
+         :Fox (-> {:position [0.0 0.0 2.5]
+                   :rotation [0.7071068286895752
+                              0.0
+                              0.0
+                              0.7071068286895752]
+                   :heading [0 0 1]
+                   :up [0 1 0]
                    :renders {}}
-                  (behavior/player-movement {"w" :forward "s" :backward})
-                  (physics/body 1.0 0.005))
-         :camera {:position [0.0 0.0 200.0]
-                  :renders {}}}))
+                  (behavior/player-movement
+                   {"w" :forward
+                    "s" :backward
+                    "a" :left
+                    "d" :right
+                    "q" :turn-left
+                    "e" :turn-right})
+                  (behavior/moveable)
+                  (physics/body 1.0 0.005))}))
 
 (defn reagent-renderer [state-atom]
   (let [frame-signal (render/frames)

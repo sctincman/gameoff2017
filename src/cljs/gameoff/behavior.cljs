@@ -85,6 +85,18 @@
        (when-let [command (s/value (:commands entity))]
          (some some? (filter #(= command %) commands)))))))
 
+(defn enter-walking [weight time-scale]
+  (fn [entity delta-t world]
+    ;; no more seperating things, just make this work
+    (let [current-scene (get-in world [:scene :current-scene])
+          scenes @(get-in world [:backend :scenes])
+          mixer (get-in scenes [current-scene :mixer])
+          walk-animation (.clipAction mixer (get-in scenes [:animations :Walk :root]))]
+      (.setEffectiveWeight walk-animation weight)
+      (.setEffectiveTimeScale walk-animation time-scale)
+      (.play walk-animation)
+      entity)))
+
 (defn step-walking [speed]
   (fn [entity & more]
     (if (physics/physical? entity)
@@ -97,7 +109,13 @@
                   (m/mmul speed heading)))
       entity)))
 
-(defn exit-walking [entity & more]
+(defn exit-walking [entity delta-t world]
+  ;;when both are standing
+  (let [current-scene (get-in world [:scene :current-scene])
+          scenes @(get-in world [:backend :scenes])
+          mixer (get-in scenes [current-scene :mixer])
+          walk-animation (.clipAction mixer (get-in scenes [:animations :Walk :root]))]
+      (.stop walk-animation))
   (update-in entity [:body :velocities] dissoc :walking))
 
 (def walking
@@ -110,13 +128,15 @@
                                              :transition :standing}
                                             {:pred (command-match :backward)
                                              :transition :walking-backward}]
+                              :enter (enter-walking 1.0 1.2)
                               :step (step-walking 0.008)
                               :exit exit-walking}
             :walking-backward {:transitions [{:pred (command-match :forward/stop :backward/stop)
                                               :transition :standing}
                                              {:pred (command-match :forward)
                                               :transition :walking-forward}]
-                               :enter (step-walking -0.005)
+                               :enter (enter-walking 1.0 -0.8)
+                               :step (step-walking -0.005)
                                :exit exit-walking}}})
 
 (defn step-strafing [speed]
@@ -124,7 +144,7 @@
     (if (physics/physical? entity)
       (let [rotation (get entity :rotation [0 0 0 1])
             heading (get entity :heading [0 1 0])
-            up (get entity :heading [0 0 1])
+            up (get entity :up [0 0 1])
             direction (take 3
                             (q/qmul rotation
                                     (conj (m/cross up heading) 0)
@@ -147,13 +167,13 @@
                                            :transition :standing}
                                           {:pred (command-match :right)
                                            :transition :strafing-right}]
-                            :step (step-strafing -0.005)
+                            :step (step-strafing 0.005)
                             :exit exit-strafing}
             :strafing-right {:transitions [{:pred (command-match :left/stop :right/stop)
                                             :transition :standing}
                                            {:pred (command-match :left)
                                             :transition :strafing-left}]
-                             :step (step-strafing 0.005)
+                             :step (step-strafing -0.005)
                              :exit exit-strafing}}})
 
 (defn step-turning [angular-speed]
@@ -174,12 +194,12 @@
                                           :transition :standing}
                                          {:pred (command-match :turn-right)
                                           :transition :turning-right}]
-                           :step (step-turning -0.002)}
+                           :step (step-turning 0.002)}
             :turning-right {:transitions [{:pred (command-match :turn-left/stop :turn-right/stop)
                                            :transition :standing}
                                           {:pred (command-match :turn-left)
                                            :transition :turning-left}]
-                            :step (step-turning 0.002)}}})
+                            :step (step-turning -0.002)}}})
 
 (defn ^:export moveable [entity]
   (-> entity
