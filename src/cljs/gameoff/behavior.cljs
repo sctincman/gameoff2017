@@ -124,7 +124,7 @@
   (update-in entity [:body :velocities] dissoc :walking))
 
 (def walking
-  {:name :walking
+  {:name :moving/walking
    :states {:standing {:transitions [{:pred (command-match :forward)
                                       :transition :walking-forward}
                                      {:pred (command-match :backward)
@@ -163,7 +163,7 @@
 
 
 (def strafing
-  {:name :strafing
+  {:name :moving/strafing
    :states {:standing {:transitions [{:pred (command-match :left)
                                       :transition :strafing-left}
                                      {:pred (command-match :right)
@@ -180,6 +180,22 @@
                                             :transition :strafing-left}]
                              :step (step-strafing -0.005)
                              :exit exit-strafing}}})
+(defn not-moving? [entity & more]
+  (reduce-kv (fn [acc machine state]
+               (if-not (and (qualified-keyword? machine)
+                            (= "moving" (namespace machine)))
+                 acc
+                 (and acc                
+                      (= :standing state))))
+             true
+             (get entity :current-states)))
+
+(def moving
+  {:name :moving
+   :states {:moving {:transitions [{:pred not-moving?
+                                    :transition :not-moving}]}
+            :not-moving {:transitions [{:pred (comp not not-moving?)
+                                        :transition :moving}]}}})
 
 (defn step-turning [angular-speed]
   (fn [entity delta-t world]
@@ -211,9 +227,11 @@
       (update :states conj walking)
       (update :states conj strafing)
       (update :states conj turning)
+      (update :states conj moving)
       (assoc-in [:current-states (:name walking)] :standing)
       (assoc-in [:current-states (:name strafing)] :standing)
-      (assoc-in [:current-states (:name turning)] :standing)))
+      (assoc-in [:current-states (:name turning)] :standing)
+      (assoc-in [:current-states (:name moving)] :not-moving)))
 
 (defn update-fsm [entity delta-t world])
 
