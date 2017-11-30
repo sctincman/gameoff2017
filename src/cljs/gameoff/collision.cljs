@@ -45,7 +45,7 @@
   "Does component have a position and collision components."
   [entity]
   (and (some? (:position entity))
-       (some? (:collidable entity))))
+       (some? (:collision entity))))
 
 (defn update-wabbs
   "A horrible hack!"
@@ -149,7 +149,7 @@
              {}
              cells))
 
-(defn null-handler [prime second-key delta-t world]
+(defn null-handler [prime & more]
   prime)
 
 (defn smallest-component [[x y z]]
@@ -182,6 +182,9 @@
       (< d-down (min d-right d-back d-front d-up d-left)) [0 0 -1]
       (< d-up (min d-left d-back d-front d-right d-down)) [0 0 1])))
 
+(defn clear-velocities [entity delta-t world]
+  (update-in entity [:body :velocities] dissoc :collisions))
+
 (defn wabb-solid-handler [prime second-key delta-t world]
   (if-let [mass-prime (get-in prime [:body :mass])]
     (let [mass-secondary (get-in world [second-key :body :mass] js/Infinity)
@@ -195,15 +198,26 @@
               direction (wabb-closest-side-normal center-point (get-in world [second-key :aabb]))
               displacement (m/mul weight-factor
                                   dimensions
-                                  direction)]
-          (update prime :position m/add displacement))))
+                                  direction)
+              ;;huge hack, but meh, game "physics", 
+              velocity-component (m/mul weight-factor
+                                        (m/dot direction
+                                               (get-in prime [:body :velocities :forces] [0 0 0]))
+                                        direction)]
+          (when (pos? (m/dot displacement
+                             (get world :up [0 0 1])))
+            (when-let [standing? (get prime :standing?)]
+              (s/propagate standing? true)))
+          (-> prime
+              (update :position m/add displacement)
+              (update-in [:body :velocities :forces] m/sub velocity-component)))))
     prime))
 
 (defn handle-collision
   [primary-key secondary-key world delta-t]
   (let [primary-entity (get world primary-key)
-        primary-event (get-in world [primary-key :collision-handlers :internal] null-handler)
-        secondary-event (get-in world [secondary-key :collision-handlers :external] null-handler)]
+        primary-event (get-in world [primary-key :collision :internal] null-handler)
+        secondary-event (get-in world [secondary-key :collision :external] null-handler)]
     (-> primary-entity
         (primary-event secondary-key delta-t world)
         (secondary-event primary-key delta-t world))))
@@ -216,10 +230,15 @@
         world (assoc-in world [:space :cells] cells)
         pairs (aabb-collision-pairs world cells)]
     (reduce-kv (fn [world primary-key collider-keys]
-                 (reduce (fn [world collider-key]
-                           (assoc world primary-key
-                                   (handle-collision primary-key collider-key world delta-t)))
-                         world
-                         collider-keys))
+                 (let [pre-event (get-in world [primary-key :collision :pre] null-handler)
+                       post-event (get-in world [primary-key :collision :post] null-handler)
+                       world (update world primary-key pre-event delta-t world)]
+                   (update (reduce (fn [world collider-key]
+                                     (assoc world primary-key
+                                            (handle-collision primary-key collider-key world delta-t)))
+                                   world
+                                   collider-keys)
+                           primary-key
+                           post-event delta-t world)))
                world
                pairs)))

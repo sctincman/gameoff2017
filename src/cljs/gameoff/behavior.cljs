@@ -124,7 +124,7 @@
                                              :transition :standing}
                                             {:pred (command-match :backward)
                                              :transition :walking-backward}]
-                              :enter (enter-walking 1.0 1.2)
+                              :enter (enter-walking 1.0 2.0)
                               :exit exit-walking}
             :walking-backward {:transitions [{:pred (command-match :forward/stop :backward/stop)
                                               :transition :standing}
@@ -187,7 +187,7 @@
   {:name :moving
    :states {:moving {:transitions [{:pred not-moving?
                                     :transition :not-moving}]
-                     :step (step-moving 0.01)
+                     :step (step-moving 0.02)
                      :exit exit-moving}
             :not-moving {:transitions [{:pred (comp not not-moving?)
                                         :transition :moving}]}}})
@@ -217,16 +217,63 @@
                                            :transition :turning-left}]
                             :step (step-turning -0.002)}}})
 
+(defn standing? [entity & more]
+  (when-let [standing? (get entity :standing?)]
+    (println "standing?" (s/value standing?))
+    (s/value standing?)))
+
+(defn falling? [entity & more]
+  (neg? (m/dot (get entity :up [0 0 1])
+               (get-in entity [:body :velocity] [0 0 0]))))
+
+(defn exit-on-ground [entity & more]
+  (when-let [standing? (get entity :standing?)]
+    (s/propagate standing? false))
+  entity)
+
+;;maybe add a "getting ready to jump" state? for animation and pop purposes
+(defn jump [scale]
+  (fn [entity & more]
+    (if (physics/physical? entity)
+      (let [rotation (get entity :rotation [0 0 0 1])
+            up (get entity :up [0 0 1])
+            direction (take 3
+                            (q/qmul rotation
+                                    (conj up 0)
+                                    (q/inverse rotation)))]
+        (update-in entity [:body :velocities :forces]
+                   m/add
+                   (m/mmul scale direction)))
+      entity)))
+
+(def vertical
+  {:name :vertical
+   :states {:on-ground {:transitions [{:pred (command-match :jump)
+                                       :transition :jumping}
+                                      {:pred falling?
+                                       :transition :falling}]
+                        :exit exit-on-ground}
+            :jumping {:transitions [{:pred standing?
+                                     :transition :on-ground}
+                                    {:pred falling?
+                                     :transition falling?}]
+                      :enter (jump 0.05)}
+            :falling {:transitions [{:pred standing?
+                                     :transition :on-ground}]}}})
+
 (defn ^:export moveable [entity]
   (-> entity
+      (assoc :standing? (s/signal true "standing"))
       (update :states conj walking)
       (update :states conj strafing)
       (update :states conj turning)
       (update :states conj moving)
+      (update :states conj vertical)
       (assoc-in [:current-states (:name walking)] :standing)
       (assoc-in [:current-states (:name strafing)] :standing)
       (assoc-in [:current-states (:name turning)] :standing)
-      (assoc-in [:current-states (:name moving)] :not-moving)))
+      (assoc-in [:current-states (:name moving)] :not-moving)
+      (assoc-in [:current-states (:name vertical)] :on-ground)))
 
 (defn update-fsm [entity delta-t world])
 

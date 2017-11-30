@@ -6,7 +6,7 @@
 
 ;;hmm body will need all forces, not just movement, hack for just movement now
 (defn ^:export body [entity mass speed]
-  (assoc entity :body (->BodyComponent mass {:forces [0 0 0]} {:forces [0 0 0]} [0 0 0] [0 0 0])))
+  (assoc entity :body (->BodyComponent mass {:forces [0 0 0]} {:forces [0 -0.00005 0]} [0 0 0] [0 0 0])))
 
 
 ;;have body listen to a forces signal

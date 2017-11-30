@@ -16,21 +16,23 @@
   (atom {:include "gltf/scene.gltf"
          :scene {:current-scene :Scene
                  :camera :PlayerCamera}
-         :Cube {:collidable true}
-         :BigCube {:collidable true}
-         :Cylinder {:collidable true}
+         :Cube {:collision true}
+         :BigCube {:collision true}
+         :Cylinder {:collision true}
+         :Ground {:collision true}
          :Fox (-> {:heading [0 1 0]
                    :up [0 0 -1]
                    :renders {}
-                   :collidable true
-                   :collision-handlers {:internal collision/wabb-solid-handler}}
+                   :collision {:pre collision/clear-velocities
+                               :internal collision/wabb-solid-handler}}
                   (behavior/player-movement
                    {"w" :forward
                     "s" :backward
                     "a" :left
                     "d" :right
                     "q" :turn-left
-                    "e" :turn-right})
+                    "e" :turn-right
+                    " " :jump})
                   (behavior/moveable)
                   (physics/body 1.0 0.005))}))
 
