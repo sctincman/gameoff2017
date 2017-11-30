@@ -7,6 +7,7 @@
               [gameoff.signals :as signals]
               [gameoff.behavior :as behavior]
               [gameoff.physics :as physics]
+              [gameoff.collision :as collision]
               [gameoff.quaternion :as q]))
 
 (def rotate-q (q/axis-angle->q [0 1 0] 0.2))
@@ -15,13 +16,13 @@
   (atom {:include "gltf/scene.gltf"
          :scene {:current-scene :Scene
                  :camera :PlayerCamera}
-         :Fox (-> {:position [0.0 0.0 2.5]
+         :Fox (-> {:position [0.0 2.5 0]
                    :rotation [0.7071068286895752
                               0.0
                               0.0
                               0.7071068286895752]
-                   :heading [0 0 1]
-                   :up [0 1 0]
+                   :heading [0 1 0]
+                   :up [0 0 -1]
                    :renders {}}
                   (behavior/player-movement
                    {"w" :forward
@@ -48,21 +49,27 @@
                        (render-backend/init-renderer e)
                        @state-atom)
               worldbah (signals/foldp (fn step-world [state step]
-                                        (into state
-                                              (comp
-                                               (map (fn [[id entity]]
-                                                      (if (or (= id :test-cube)
-                                                              (= id :fox))
-                                                        {id (update entity :rotation q/qmul rotate-q)}
-                                                        {id entity})))
-                                               (behavior/propagate step)
-                                               (physics/propagate step)
-                                               (render/renderx backend
-                                                               (get-in state [:scene :camera] :camera)
-                                                               (get-in state [:scene :current-scene] :default)
-                                                               step))
-                                              state))
-                                      (swap! state-atom assoc :backend backend)
+                                        (-> state
+                                            (behavior/propagate step state)
+                                            (into (comp
+                                                   (map (fn [[id entity]]
+                                                          (if (or (= id :test-cube)
+                                                                  (= id :fox))
+                                                            {id (update entity :rotation q/qmul rotate-q)}
+                                                            {id entity})))
+                                                   (behavior/propagate step)
+                                                   (physics/propagate step)
+                                                   (render/renderx backend
+                                                                   (get-in state [:scene :camera] :camera)
+                                                                   (get-in state [:scene :current-scene] :default)
+                                                                   step))
+                                                  state)))
+                                      (swap! state-atom
+                                             (fn [state]
+                                               (-> state
+                                                   (assoc :backend backend)
+                                                   (behavior/add-world-commands {"b" :bounding-boxes-toggle})
+                                                   (collision/add-space 15.0))))
                                       (signals/dt frame-signal)
                                       :out-signal world)]))
       :component-will-unmount

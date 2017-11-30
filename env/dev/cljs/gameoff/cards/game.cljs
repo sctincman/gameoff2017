@@ -11,26 +11,27 @@
     :as dc
     :refer [defcard defcard-doc defcard-rg deftest]]))
 
-(defonce game-state (atom {:include "gltf/scene.gltf"
-                           :scene {:current-scene :Scene
-                                   :camera :PlayerCamera}
-                           :Fox (-> {:position [0.0 0.0 2.5]
-                                     :rotation [0.7071068286895752
-                                                0.0
-                                                0.0
-                                                0.7071068286895752]
-                                     :heading [0 0 1]
-                                     :up [0 1 0]
-                                     :renders {}}
-                                    (behavior/player-movement
-                                     {"w" :forward
-                                      "s" :backward
-                                      "a" :left
-                                      "d" :right
-                                      "q" :turn-left
-                                      "e" :turn-right})
-                                    (behavior/moveable)
-                                    (physics/body 1.0 0.005))}))
+(defonce game-state
+  (atom {:include "gltf/scene.gltf"
+         :scene {:current-scene :Scene
+                 :camera :PlayerCamera}
+         :Fox (-> {:position [0.0 2.5 0]
+                   :rotation [0.7071068286895752
+                              0.0
+                              0.0
+                              0.7071068286895752]
+                   :heading [0 1 0]
+                   :up [0 0 -1]
+                   :renders {}}
+                  (behavior/player-movement
+                   {"w" :forward
+                    "s" :backward
+                    "a" :left
+                    "d" :right
+                    "q" :turn-left
+                    "e" :turn-right})
+                  (behavior/moveable)
+                  (physics/body 1.0 0.005))}))
 
 (defcard-rg load-scene
   (fn [game-state _] [core/reagent-renderer game-state])

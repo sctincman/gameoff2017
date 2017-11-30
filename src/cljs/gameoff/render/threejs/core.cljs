@@ -7,6 +7,14 @@
             [cljsjs.three-examples.loaders.MTLLoader]
             [cljsjs.three-examples.loaders.OBJLoader2]))
 
+(defn recurse-children
+  [threejsobj levelstring]
+  (let [children (aget threejsobj "children")]
+    (println levelstring (aget threejsobj "name") (count children))
+    (when (pos? (count children))
+      (doseq [child children]
+        (recurse-children child (str levelstring "+"))))))
+
 (defn ^:export create-program [gl vertex-source fragment-source]
   (let [program (.createProgram gl)
         vertex-shader (.createShader gl (.-VERTEX_SHADER gl))
@@ -59,15 +67,22 @@
                    loaded-scenes
                    (into {}
                          (map (fn [scene]
-                                (let [mixer (js/THREE.AnimationMixer. scene)]
+                                (let [mixer (js/THREE.AnimationMixer. scene)
+                                      bbhelpers (js/THREE.Group.)]
                                   (.add scene (js/THREE.AmbientLight. 0xffffff))
                                   (set! (.-background scene) (js/THREE.Color. 0x6c6c6c))
+                                  (.updateMatrixWorld scene true)
+                                  (.updateMatrixWorld bbhelpers true)
+                                  (.add scene bbhelpers)
+                                  (aset bbhelpers "visisble" false)
                                   {(keyword (str (aget scene "name")))
                                    {:root scene
                                     :mixer mixer
+                                    :bounding-boxes bbhelpers
                                     :children
                                     (into {}
                                           (map (fn [child]
+                                                 (.add bbhelpers (js/THREE.BoxHelper. child 0xff0000))
                                                  {(keyword (str (aget child "name")))
                                                   {:root child}})
                                                (aget scene "children")))}}))
@@ -84,6 +99,21 @@
            (fn [b] "Progress event")
            (fn [c] (println "Failed to load " path)))
     backend))
+
+(defn show-bounding-boxes
+  ([world]
+   (let [status (get world :show-bounding-boxes false)]
+     (show-bounding-boxes world (not status))))
+  ([world show?]
+   (let [current-scene (get-in world [:scene :current-scene])
+         scenes @(get-in world [:backend :scenes])
+         bbs (get-in scenes [current-scene :bounding-boxes])]
+     (println show?)
+     (if show?
+       (do ( println "Showing") (aset bbs "visisble" true))
+       (do (println "hiding") (aset bbs "visisble" false)))
+     (println "WAH")
+     (assoc world :show-bounding-boxes show?))))
 
 (def obj-loader (js/THREE.OBJLoader2.))
 (def mtl-loader (js/THREE.MTLLoader.))

@@ -2,11 +2,12 @@
   (:require [gameoff.signals :as s]
             [gameoff.input :as input]
             [gameoff.physics :as physics]
+            [gameoff.render.threejs.core :as render]
             [gameoff.quaternion :as q]
             [clojure.core.matrix :as m]))
 
 (defn ^:export behavioral? [entity]
-  (some? (or (get entity :behaviors)
+  (some? (or (get entity :behavior)
              (get entity :states))))
 
 (defn ^:export add-behavior [entity behavior]
@@ -50,14 +51,19 @@
           entity
           (:states entity)))
 
+(defn run-behaviors [entity delta-t world]
+  (let [behavior (get entity :behavior)]
+    (if (fn? behavior)
+      (behavior entity delta-t world)
+      entity)))
+
 (defn ^:export propagate
   "Propagate AI behavior over time"
   ([entity delta-t world]
    (if (behavioral? entity)
      (-> entity
          (step-states delta-t world)
-         ;#((get % :behavior) % delta-t world)
-         )
+         (run-behaviors delta-t world))
      entity))
   ([delta-t]
    (fn [xform]
@@ -91,7 +97,7 @@
     (let [current-scene (get-in world [:scene :current-scene])
           scenes @(get-in world [:backend :scenes])
           mixer (get-in scenes [current-scene :mixer])
-          walk-animation (.clipAction mixer (get-in scenes [:animations :Walk :root]))]
+          walk-animation (.clipAction mixer (get-in scenes [:animations :Fox_Walk :root]))]
       (.setEffectiveWeight walk-animation weight)
       (.setEffectiveTimeScale walk-animation time-scale)
       (.play walk-animation)
@@ -112,10 +118,11 @@
 (defn exit-walking [entity delta-t world]
   ;;when both are standing
   (let [current-scene (get-in world [:scene :current-scene])
-          scenes @(get-in world [:backend :scenes])
-          mixer (get-in scenes [current-scene :mixer])
-          walk-animation (.clipAction mixer (get-in scenes [:animations :Walk :root]))]
-      (.stop walk-animation))
+        scenes @(get-in world [:backend :scenes])
+        mixer (get-in scenes [current-scene :mixer])
+        walk-animation (.clipAction mixer (get-in scenes [:animations :Fox_Walk :root]))]
+    (.setEffectiveWeight walk-animation 0)
+    (.stop walk-animation))
   (update-in entity [:body :velocities] dissoc :walking))
 
 (def walking
@@ -225,6 +232,31 @@
     (-> entity
         (assoc :input keymap)
         (assoc :commands input-signal))))
+
+(defn ^:export handle-world-commands [entity delta-t world]
+  (let [command (s/value (get entity :commands))
+        result (condp = command
+                 :bounding-boxes-toggle (render/show-bounding-boxes entity)
+                 nil)]
+    (if (some? result)
+      (do
+        (s/propagate (get result :commands) :handled)
+        result)
+      entity)))
+
+(defn ^:export add-world-commands
+  "Given a keymap and entity, add input-driven movement component to entity, and returns updated entity."
+  [world keymap]
+  (let [input-signal (s/map (fn [event]
+                              (if-let [command (keymap (:key event))]
+                                (if (= :down (:press event))
+                                  command
+                                  (keyword command :stop))))
+                            input/keyboard)]
+    (-> world
+        (assoc :input keymap)
+        (assoc :commands input-signal)
+        (add-behavior handle-world-commands))))
 
 (defn- follow*
   [target offset]
