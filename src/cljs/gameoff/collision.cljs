@@ -122,6 +122,11 @@
        (and (<= (back first-aabb) (front second-aabb))
             (>= (front first-aabb) (back second-aabb)))))
 
+(defn intersect-wabb [first-wabb second-wabb]
+  (let [min-point (map max (mins first-wabb) (mins second-wabb))
+        max-point (map min (maxs first-wabb) (maxs second-wabb))]
+    (->WABB min-point max-point)))
+
 (defn ^:export aabb-collision-pairs
   "Returns list of collision pairs"
   [world cells]
@@ -148,10 +153,24 @@
   (println "Collision! " second-key)
   prime)
 
+(defn wabb-solid-handler [prime second-key delta-t world]
+  (if-let [mass-prime (get-in prime [:body :mass])]
+    (let [mass-secondary (get-in world [second-key :body :mass] js/Infinity)
+          overlap (intersect-wabb (:aabb prime) (get-in world [second-key :aabb]))
+          dimensions (m/sub (maxs overlap) (mins overlap))
+          weight-factor (- 1 (/ mass-prime (+ mass-prime mass-secondary)))
+          direction (m/normalise (m/sub (:position prime)
+                                        (get-in world [:second-key :position])))
+          displacement (m/mul weight-factor (m/mul direction
+                                                   (m/dot direction
+                                                          dimensions)))]
+      (update prime :position m/add displacement))
+    prime))
+
 (defn handle-collision
   [primary-key secondary-key world delta-t]
   (let [primary-entity (get world primary-key)
-        primary-event (get-in world [primary-key :collision-handlers :external] null-handler)
+        primary-event (get-in world [primary-key :collision-handlers :internal] null-handler)
         secondary-event (get-in world [secondary-key :collision-handlers :external] null-handler)]
     (-> primary-entity
         (primary-event secondary-key delta-t world)
