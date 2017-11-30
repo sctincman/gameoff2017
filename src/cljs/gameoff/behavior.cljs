@@ -67,9 +67,10 @@
     entity))
 
 (defn ^:export step [world delta-t]
-  (reduce-kv (fn [world id entity]
-               (update world id propagate delta-t world))
-             world world))
+  (let [world (propagate world delta-t world)]
+    (reduce-kv (fn [world id entity]
+                 (update world id propagate delta-t world))
+               world world)))
 
 
 (defn command-match
@@ -231,14 +232,15 @@
         (assoc :commands input-signal))))
 
 (defn ^:export handle-world-commands [entity delta-t world]
-  (let [command (s/value (get entity :commands))
+  (let [event-signal (get entity :events)
+        command (s/value event-signal)
         result (condp = command
                  :bounding-boxes-toggle (render/show-bounding-boxes entity)
+                 :external-loaded (render/update-entities entity)
                  nil)]
+    (s/propagate event-signal :handled)
     (if (some? result)
-      (do
-        (s/propagate (get result :commands) :handled)
-        result)
+      result
       entity)))
 
 (defn ^:export add-world-commands
@@ -252,7 +254,7 @@
                             input/keyboard)]
     (-> world
         (assoc :input keymap)
-        (assoc :commands input-signal)
+        (assoc :events input-signal)
         (add-behavior handle-world-commands))))
 
 (defn- follow*

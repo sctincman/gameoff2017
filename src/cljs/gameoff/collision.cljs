@@ -1,5 +1,6 @@
 (ns gameoff.collision
   (:require [gameoff.signals :as s]
+            [gameoff.render.core :as r]
             [gameoff.render.threejs.core :as render]
             [clojure.core.matrix :as m]))
 
@@ -56,12 +57,13 @@
     (reduce-kv (fn [world id entity]
                  (if-not (spatial? entity)
                    world
-                   (if-let [root  (get-in scenes [current-scene :children id :root])]
-                     (let [box3  (.setFromObject box3 root)
-                           wabb (->WABB [(aget box3 "min" "x") (aget box3 "min" "y") (aget box3 "min" "z")]
-                                        [(aget box3 "max" "x") (aget box3 "max" "y") (aget box3 "max" "z")])]
-                       (assoc-in world [id :aabb] wabb))
-                     world)))
+                   (do (r/update-object! (:backend world) id world) ;because we use ThreeJS's AABB, we need to update from physics...
+                       (if-let [root  (get-in scenes [current-scene :children id :root])]
+                         (let [box3  (.setFromObject box3 root)
+                               wabb (->WABB [(aget box3 "min" "x") (aget box3 "min" "y") (aget box3 "min" "z")]
+                                            [(aget box3 "max" "x") (aget box3 "max" "y") (aget box3 "max" "z")])]
+                           (assoc-in world [id :aabb] wabb))
+                         world))))
                world
                world)))
 
@@ -131,40 +133,70 @@
   "Returns list of collision pairs"
   [world cells]
   (reduce-kv (fn [pairs cell children]
-               (loop [first-key (first children)
-                      the-rest (rest children)
-                      pairs pairs]
-                 (if (pos? (count the-rest))
-                   (recur (first the-rest) (rest the-rest)
-                          (reduce (fn [pairs second-key]
-                                    (if (aabb-intersects? (get-in world [first-key :aabb])
-                                                          (get-in world [second-key :aabb]))
-                                      (update pairs first-key
-                                              (fn [others]
-                                                (set (conj others second-key))))
-                                      pairs))
-                                  pairs
-                                  the-rest))
-                   pairs)))
+               (reduce (fn [pairs first-key]
+                         (reduce (fn [pairs second-key]
+                                   (if (and (not (= first-key second-key))
+                                            (aabb-intersects? (get-in world [first-key :aabb])
+                                                              (get-in world [second-key :aabb])))
+                                     (update pairs first-key
+                                             (fn [others]
+                                               (set (conj others second-key))))
+                                     pairs))
+                                 pairs
+                                 children))
+                       pairs
+                       children))
              {}
              cells))
 
 (defn null-handler [prime second-key delta-t world]
-  (println "Collision! " second-key)
   prime)
+
+(defn smallest-component [[x y z]]
+  (cond
+    (< x (min y z)) [x 0 0]
+    (< y (min x z)) [0 y 0]
+    :else [0 0 z]))
+
+(defn largest-component [[x y z]]
+  (cond
+    (> x (max y z)) [x 0 0]
+    (> y (max x z)) [0 y 0]
+    :else [0 0 z]))
+
+(defn wabb-closest-side-normal [point wabb]
+  (let [[x y z] point
+        [x1 y1 z1] (mins wabb)
+        [x2 y2 z2] (maxs wabb)
+        d-left (- x x1)
+        d-right (- x2 x)
+        d-back (- y y1)
+        d-front (- y2 y)
+        d-down (- z z1)
+        d-up (- z2 z)]
+    (cond
+      (< d-left (min d-right d-back d-front d-up d-down)) [-1 0 0]
+      (< d-right (min d-left d-back d-front d-up d-down)) [1 0 0]
+      (< d-back (min d-right d-left d-front d-up d-down)) [0 -1 0]
+      (< d-front (min d-left d-back d-right d-up d-down)) [0 1 0]
+      (< d-down (min d-right d-back d-front d-up d-left)) [0 0 -1]
+      (< d-up (min d-left d-back d-front d-right d-down)) [0 0 1])))
 
 (defn wabb-solid-handler [prime second-key delta-t world]
   (if-let [mass-prime (get-in prime [:body :mass])]
     (let [mass-secondary (get-in world [second-key :body :mass] js/Infinity)
           overlap (intersect-wabb (:aabb prime) (get-in world [second-key :aabb]))
-          dimensions (m/sub (maxs overlap) (mins overlap))
-          weight-factor (- 1 (/ mass-prime (+ mass-prime mass-secondary)))
-          direction (m/normalise (m/sub (:position prime)
-                                        (get-in world [:second-key :position])))
-          displacement (m/mul weight-factor (m/mul direction
-                                                   (m/dot direction
-                                                          dimensions)))]
-      (update prime :position m/add displacement))
+          dimensions (m/sub (maxs overlap) (mins overlap))]
+      (if (= 3 (m/zero-count dimensions))
+        prime
+        (let [center-point (m/sub (maxs overlap)
+                                  (m/mul 0.5 dimensions))
+              weight-factor (- 1 (/ mass-prime (+ mass-prime mass-secondary)))
+              direction (wabb-closest-side-normal center-point (get-in world [second-key :aabb]))
+              displacement (m/mul weight-factor
+                                  dimensions
+                                  direction)]
+          (update prime :position m/add displacement))))
     prime))
 
 (defn handle-collision

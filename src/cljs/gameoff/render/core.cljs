@@ -34,7 +34,8 @@
 
 (defprotocol ^:export IRenderBackend
   "Abstract the details of a backend into this standard interface."
-  (render-backend [this world delta-t] "Using the list of entities, render and display the scene. Camera is the key of the camera entity to use for rendering."))
+  (render-backend [this world delta-t] "Using the list of entities, render and display the scene. Camera is the key of the camera entity to use for rendering.")
+  (update-object! [this id world] "Bah"))
 
 (defn ^:export render [world delta-t]
   (render-backend (:backend world) world delta-t))

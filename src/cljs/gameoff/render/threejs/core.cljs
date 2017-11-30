@@ -2,6 +2,7 @@
   (:require [gameoff.render.core :as render]
             [gameoff.render.threejs.sprite :as sprite]
             [gameoff.render.threejs.texture :as texture]
+            [gameoff.signals :as s]
             [cljsjs.three]
             [cljsjs.three-examples.loaders.GLTFLoader]
             [cljsjs.three-examples.loaders.MTLLoader]
@@ -32,7 +33,6 @@
   (let [canvas (aget (:renderer backend) "domElement")
         scenes (:scenes backend)]
     (fn [event]
-      (println "Resize")
       (let [width (aget canvas "parentElement" "offsetWidth")
             height (aget canvas "parentElement" "offsetHeight")
             aspect (/ width height)
@@ -47,9 +47,10 @@
               (recur (first the-rest) (rest the-rest)))))))))
 
 (defn ^:export load-gltf
-  [backend path]
+  [backend path world]
   (let [scenes (:scenes backend)
-        gltf-loader (js/THREE.GLTFLoader.)]
+        gltf-loader (js/THREE.GLTFLoader.)
+        commands (:events world)]
     (.load gltf-loader path
            (fn [gltf]
              (let [cameras
@@ -94,10 +95,11 @@
                                      (assoc :cameras (into cameras current-cameras))
                                      (into loaded-scenes) ;for now, just overwrite, later try to do smart merge
                                      ))))
-               ((resize-handler backend) nil)))
+               ((resize-handler backend) nil)
+               (s/propagate commands :external-loaded)))
            (fn [b] "Progress event")
            (fn [c] (println "Failed to load " path)))
-    backend))
+    (assoc world :backend backend)))
 
 (defn show-bounding-boxes
   ([world]
@@ -107,11 +109,9 @@
    (let [current-scene (get-in world [:scene :current-scene])
          scenes @(get-in world [:backend :scenes])
          bbs (get-in scenes [current-scene :bounding-boxes])]
-     (println show?)
      (if show?
        (do ( println "Showing") (aset bbs "visisble" true))
        (do (println "hiding") (aset bbs "visisble" false)))
-     (println "WAH")
      (assoc world :show-bounding-boxes show?))))
 
 (def obj-loader (js/THREE.OBJLoader2.))
@@ -150,10 +150,39 @@
 
 (defn- update-object
   [entity mesh]
-  (when-let [[x y z] (:position entity)]
+  (if-let [[x y z] (:position entity)]
     (.set (.-position mesh) x y z))
   (when-let [[x y z w] (:rotation entity)]
     (.set (.-quaternion mesh) x y z w)))
+
+(defn ^:export update-entities
+  "Because GRRR. Allow using values from GLTF without needing to specify in state. Called from :external-loaded handler"
+  [world]
+  (let [scenes @(get-in world [:backend :scenes])
+        current-scene (get scenes (get-in world [:scene :current-scene]))]
+    (reduce-kv (fn [world id child]
+                 (if-let [obj (get child :root)]
+                   (update world id
+                           (fn [entity]
+                             (-> entity
+                                 (update :position
+                                         (fn [pos]
+                                           (if (some? pos)
+                                             pos
+                                             [(aget obj "position" "x")
+                                              (aget obj "position" "y")
+                                              (aget obj "position" "z")])))
+                                 (update :rotation
+                                         (fn [rot]
+                                           (if (some? rot)
+                                             rot
+                                             [(aget obj "quaternion" "x")
+                                              (aget obj "quaternion" "y")
+                                              (aget obj "quaternion" "z")
+                                              (aget obj "quaternion" "w")]))))))
+                   world))
+               world
+               (get current-scene :children))))
 
 (defrecord ^:export ThreeJSBackend [renderer scenes]
   render/IRenderBackend
@@ -177,7 +206,12 @@
         (.render renderer
                  (get-in @scenes [scene :root])
                  (get-in @scenes [:cameras camera :root])))
-      world)))
+      world))
+  
+  (update-object! [this id world]
+    (when-let [obj (get-in @scenes [(get-in world [:scene :current-scene] :default)
+                                    :children id :root])]
+      (update-object (get world id) obj))))
 
 (defn- create-renderer
   ([]
@@ -199,35 +233,36 @@
     backend))
 
 (defn ^:export setup-scene
-  [backend state]
-  (if (some? (:include state))
-    (load-gltf backend (:include state))
-    (let [scene    (js/THREE.Scene.)
-          camera (js/THREE.PerspectiveCamera.
+  [world e]
+  (let [backend (init-renderer e)]
+    (if (some? (:include world))
+      (load-gltf backend (:include world) world)
+      (let [scene    (js/THREE.Scene.)
+            camera (js/THREE.PerspectiveCamera.
                     75 1 0.1 1000)
-          light (js/THREE.AmbientLight. 0xffffff)
-          light2 (js/THREE.PointLight. 0xffffff 2 0)]
-      (set! (.-background scene) (js/THREE.Color. 0x6c6c6c))
-      (.add scene light)
-      (.set (.-position light2) 200 200 700)
-      (.add scene light2)
-      (aset camera "name" "camera")
-      (aset camera "position" "z" 10)
-      (.add scene camera)
-      (swap! (:scenes backend)
-             (fn [scenes-map]
-               (-> scenes-map
-                   (assoc :default
-                          {:root scene
-                           :mixer (js/THREE.AnimationMixer.)
-                           :children
-                           {:sun {:root light}
-                            :camera {:root camera}}})
-                   (assoc :cameras
-                          {:default {:root camera}}))))
-      (.addEventListener js/document "readystatechange" (on-ready backend))
-      ((resize-handler backend) nil)
-      backend)))
+            light (js/THREE.AmbientLight. 0xffffff)
+            light2 (js/THREE.PointLight. 0xffffff 2 0)]
+        (set! (.-background scene) (js/THREE.Color. 0x6c6c6c))
+        (.add scene light)
+        (.set (.-position light2) 200 200 700)
+        (.add scene light2)
+        (aset camera "name" "camera")
+        (aset camera "position" "z" 10)
+        (.add scene camera)
+        (swap! (:scenes backend)
+               (fn [scenes-map]
+                 (-> scenes-map
+                     (assoc :default
+                            {:root scene
+                             :mixer (js/THREE.AnimationMixer.)
+                             :children
+                             {:sun {:root light}
+                              :camera {:root camera}}})
+                     (assoc :cameras
+                            {:default {:root camera}}))))
+        (.addEventListener js/document "readystatechange" (on-ready backend))
+        ((resize-handler backend) nil)
+        (assoc world :backend backend)))))
 
 (defn ^:export js-renderer
   ([state] (js-renderer state js/document.body))

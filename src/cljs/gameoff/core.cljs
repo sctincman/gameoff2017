@@ -16,14 +16,14 @@
   (atom {:include "gltf/scene.gltf"
          :scene {:current-scene :Scene
                  :camera :PlayerCamera}
-         :Fox (-> {:position [0.0 2.5 0]
-                   :rotation [0.7071068286895752
-                              0.0
-                              0.0
-                              0.7071068286895752]
-                   :heading [0 1 0]
+         :Cube {:collidable true}
+         :BigCube {:collidable true}
+         :Cylinder {:collidable true}
+         :Fox (-> {:heading [0 1 0]
                    :up [0 0 -1]
-                   :renders {}}
+                   :renders {}
+                   :collidable true
+                   :collision-handlers {:internal collision/wabb-solid-handler}}
                   (behavior/player-movement
                    {"w" :forward
                     "s" :backward
@@ -32,9 +32,7 @@
                     "q" :turn-left
                     "e" :turn-right})
                   (behavior/moveable)
-                  (physics/body 1.0 0.005))
-         :Cube (-> {:position [7.26, 2.25, 15.76]
-                    :aabb nil})}))
+                  (physics/body 1.0 0.005))}))
 
 (defn reagent-renderer [state-atom]
   (let [frame-signal (render/frames)
@@ -47,9 +45,6 @@
       :component-did-mount
       (fn threejs-canvas-did-mount [this]
         (let [e (reagent/dom-node this)
-              backend (render-backend/setup-scene
-                       (render-backend/init-renderer e)
-                       @state-atom)
               world-signal (signals/foldp
                             (fn step-world [world step]
                               (-> world
@@ -60,8 +55,8 @@
                             (swap! state-atom
                                    (fn [state]
                                      (-> state
-                                         (assoc :backend backend)
                                          (behavior/add-world-commands {"b" :bounding-boxes-toggle})
+                                         (render-backend/setup-scene e)
                                          (collision/add-space 15.0))))
                             (signals/dt frame-signal)
                             :out-signal world-base)]))
