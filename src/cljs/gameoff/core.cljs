@@ -32,11 +32,13 @@
                     "q" :turn-left
                     "e" :turn-right})
                   (behavior/moveable)
-                  (physics/body 1.0 0.005))}))
+                  (physics/body 1.0 0.005))
+         :Cube (-> {:position [7.26, 2.25, 15.76]
+                    :aabb nil})}))
 
 (defn reagent-renderer [state-atom]
   (let [frame-signal (render/frames)
-        world (signals/->Signal state-atom :world (atom {}))]
+        world-base (signals/->Signal state-atom :world (atom {}))]
     (reagent/create-class
      {:display-name "threejs-canvas"
       :reagent-render
@@ -48,30 +50,21 @@
               backend (render-backend/setup-scene
                        (render-backend/init-renderer e)
                        @state-atom)
-              worldbah (signals/foldp (fn step-world [state step]
-                                        (-> state
-                                            (behavior/propagate step state)
-                                            (into (comp
-                                                   (map (fn [[id entity]]
-                                                          (if (or (= id :test-cube)
-                                                                  (= id :fox))
-                                                            {id (update entity :rotation q/qmul rotate-q)}
-                                                            {id entity})))
-                                                   (behavior/propagate step)
-                                                   (physics/propagate step)
-                                                   (render/renderx backend
-                                                                   (get-in state [:scene :camera] :camera)
-                                                                   (get-in state [:scene :current-scene] :default)
-                                                                   step))
-                                                  state)))
-                                      (swap! state-atom
-                                             (fn [state]
-                                               (-> state
-                                                   (assoc :backend backend)
-                                                   (behavior/add-world-commands {"b" :bounding-boxes-toggle})
-                                                   (collision/add-space 15.0))))
-                                      (signals/dt frame-signal)
-                                      :out-signal world)]))
+              world-signal (signals/foldp
+                            (fn step-world [world step]
+                              (-> world
+                                  (behavior/step step)
+                                  (physics/step step)
+                                  (collision/handle-collisions step)
+                                  (render/render step)))
+                            (swap! state-atom
+                                   (fn [state]
+                                     (-> state
+                                         (assoc :backend backend)
+                                         (behavior/add-world-commands {"b" :bounding-boxes-toggle})
+                                         (collision/add-space 15.0))))
+                            (signals/dt frame-signal)
+                            :out-signal world-base)]))
       :component-will-unmount
       (fn [this]
         (.cancelAnimationFrame js/window (get (deref (get frame-signal :properties))

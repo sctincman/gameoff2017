@@ -29,27 +29,14 @@
                          (vals (get-in body[:body :velocities])))]    
     (update-in body [:position] m/add (m/mmul delta-t velocity))))
 
-(defn propagate
-  ([body delta-t]
-   (if (physical? body)
-     (-> body
-         (accelerate delta-t)
-         (velocitate delta-t))
-     body))
-  ([delta-t]
-   (fn [xform]
-     (fn
-       ([] (xform))
-       ([world] (xform world))
-       ([world entity]
-        (let [[id body] (first entity)]
-          (xform world {id (propagate body delta-t)})))))))
+(defn propagate [body delta-t]
+  (if (physical? body)
+    (-> body
+        (accelerate delta-t)
+        (velocitate delta-t))
+    body))
 
-(defn ^:export update-bodies
-  [entities delta-t]
-  (reduce-kv (fn [entities id entity]
-               (if (physical? entity)
-                 (assoc entities id (propagate entity delta-t))
-                 entities))
-             entities
-             entities))
+(defn ^:export step [world delta-t]
+  (reduce-kv (fn [world id entity]
+               (update world id propagate delta-t))
+             world world))

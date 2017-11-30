@@ -73,8 +73,7 @@
                                   (set! (.-background scene) (js/THREE.Color. 0x6c6c6c))
                                   (.updateMatrixWorld scene true)
                                   (.updateMatrixWorld bbhelpers true)
-                                  (.add scene bbhelpers)
-                                  (aset bbhelpers "visisble" false)
+                                  ;;(.add scene bbhelpers)
                                   {(keyword (str (aget scene "name")))
                                    {:root scene
                                     :mixer mixer
@@ -154,54 +153,31 @@
   (when-let [[x y z] (:position entity)]
     (.set (.-position mesh) x y z))
   (when-let [[x y z w] (:rotation entity)]
-    (.set (.-quaternion mesh) x y z w))
-  (.updateMatrix mesh))
+    (.set (.-quaternion mesh) x y z w)))
 
 (defrecord ^:export ThreeJSBackend [renderer scenes]
   render/IRenderBackend
-  (render [this entities camera]
-    (comment (let [cam (:object (first (:renders (get entities camera))))
-                   entities (doall (render/prepare-scene this (render/animate entities 0.0)))
-                   ]
-               (.render renderer scene cam)
-               entities)))
-  (renderx [this camera scene delta-t]
-    (if-not (some? (get @scenes scene))
-      (map identity)
-      (fn [xform]
-        (fn
-          ([] (xform))
-          ([result]
-           (.update (get-in @scenes [scene :mixer]) (* 0.001 delta-t))
-           (.render renderer
-                    (get-in @scenes [scene :root])
-                    (get-in @scenes [:cameras camera :root]))
-           (xform result))
-          ([result input]
-           (let [[id entity] (first input)]
-             (when (render/renderable? entity)
-               (when-not (contains? (get-in @scenes [scene :children]) id)
-                 (let [node (js/THREE.Object3D.)]
-                   (aset node "name" (name id))
-                   (.add (get-in @scenes [scene :root]) node)
-                   (swap! scenes assoc-in [scene :children id]
-                          {:root node
-                           :children {}})))
-               (when-let [obj (get-in @scenes [scene :children id :root])]
-                 ;; update animationclips/animationactions based on state
-                 (update-object entity obj))
-               (when-not (empty? (:renders entity))
-                 (loop [[render-id render-desc] (first (:renders entity))
-                        the-rest (rest (:renders entity))]
-                   (let [children (get-in @scenes [scene :children id :children])]
-                     (if (contains? children render-id)
-                       (when-let [obj (get-in children [render-id :root])]
-                         ;; update animationclips/animationactions based on state
-                         (update-object render-desc obj))
-                       (create-object this scene id render-desc render-id)))
-                   (when-not (empty? the-rest)
-                     (recur (first the-rest) (rest the-rest)))))))    
-           (xform result input)))))))
+  (render-backend [this world delta-t]
+    (let [scene (get-in world [:scene :current-scene] :default)
+          camera (get-in world [:scene :camera] :default)]
+      (when (some? (get @scenes scene))
+        (doseq [[id entity] world]
+          (when (render/renderable? entity)
+            (when-let [obj (get-in @scenes [scene :children id :root])]
+              (update-object entity obj))
+            (when-not (empty? (:renders entity))
+              (doseq [[render-id render-desc] (:renders entity)]
+                (let [children (get-in @scenes [scene :children id :children])]
+                  (if (contains? children render-id)
+                    (when-let [obj (get-in children [render-id :root])]
+                      ;; update animationclips/animationactions based on state
+                      (update-object render-desc obj))
+                    (create-object this scene id render-desc render-id)))))))
+        (.update (get-in @scenes [scene :mixer]) (* 0.001 delta-t))
+        (.render renderer
+                 (get-in @scenes [scene :root])
+                 (get-in @scenes [:cameras camera :root])))
+      world)))
 
 (defn- create-renderer
   ([]
@@ -248,7 +224,7 @@
                            {:sun {:root light}
                             :camera {:root camera}}})
                    (assoc :cameras
-                          {:camera {:root camera}}))))
+                          {:default {:root camera}}))))
       (.addEventListener js/document "readystatechange" (on-ready backend))
       ((resize-handler backend) nil)
       backend)))

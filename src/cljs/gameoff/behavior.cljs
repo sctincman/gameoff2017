@@ -59,20 +59,17 @@
 
 (defn ^:export propagate
   "Propagate AI behavior over time"
-  ([entity delta-t world]
-   (if (behavioral? entity)
-     (-> entity
-         (step-states delta-t world)
-         (run-behaviors delta-t world))
-     entity))
-  ([delta-t]
-   (fn [xform]
-     (fn
-       ([] (xform))
-       ([world] (xform world))
-       ([world entity]
-        (let [[id automata] (first entity)]
-          (xform world {id (propagate automata delta-t world)})))))))
+  [entity delta-t world]
+  (if (behavioral? entity)
+    (-> entity
+        (step-states delta-t world)
+        (run-behaviors delta-t world))
+    entity))
+
+(defn ^:export step [world delta-t]
+  (reduce-kv (fn [world id entity]
+               (update world id propagate delta-t world))
+             world world))
 
 
 (defn command-match
