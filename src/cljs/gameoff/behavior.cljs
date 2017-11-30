@@ -76,18 +76,21 @@
 (defn command-match
   ([command-to-match]
    (fn [entity delta-t world]
-     (when-let [command (s/value (:commands entity))]
-       (= command-to-match command))))
+     (when-let [commands (s/value (:commands entity))]
+       (some #(= command-to-match %) commands))))
   ([command-a command-b]
    (fn [entity delta-t world]
-     (when-let [command (s/value (:commands entity))]
-       (or (= command-a command)
-           (= command-b command)))))
+     (when-let [commands (s/value (:commands entity))]
+       (some #(or (= command-a %)
+                  (= command-b %))
+             commands))))
   ([command-a command-b & more]
-   (let [commands (conj more command-a command-b)]
+   (let [commands-to-match (conj more command-a command-b)]
      (fn [entity delta-t world]
-       (when-let [command (s/value (:commands entity))]
-         (some some? (filter #(= command %) commands)))))))
+       (when-let [commands (s/value (:commands entity))]
+         (some (fn [command]
+                 (some some? (filter #(= command %) commands-to-match)))
+               commands))))))
 
 (defn enter-walking [weight time-scale]
   (fn [entity delta-t world]
@@ -101,18 +104,6 @@
       (.play walk-animation)
       entity)))
 
-(defn step-walking [speed]
-  (fn [entity & more]
-    (if (physics/physical? entity)
-      (let [rotation (get entity :rotation [0 0 0 1])
-            heading (take 3
-                          (q/qmul rotation
-                                  (conj (get entity :heading [0 1 0]) 0)
-                                  (q/inverse rotation)))]
-        (assoc-in entity [:body :velocities :walking]
-                  (m/mmul speed heading)))
-      entity)))
-
 (defn exit-walking [entity delta-t world]
   ;;when both are standing
   (let [current-scene (get-in world [:scene :current-scene])
@@ -121,7 +112,7 @@
         walk-animation (.clipAction mixer (get-in scenes [:animations :Fox_Walk :root]))]
     (.setEffectiveWeight walk-animation 0)
     (.stop walk-animation))
-  (update-in entity [:body :velocities] dissoc :walking))
+  entity)
 
 (def walking
   {:name :moving/walking
@@ -134,33 +125,13 @@
                                             {:pred (command-match :backward)
                                              :transition :walking-backward}]
                               :enter (enter-walking 1.0 1.2)
-                              :step (step-walking 0.008)
                               :exit exit-walking}
             :walking-backward {:transitions [{:pred (command-match :forward/stop :backward/stop)
                                               :transition :standing}
                                              {:pred (command-match :forward)
                                               :transition :walking-forward}]
                                :enter (enter-walking 1.0 -0.8)
-                               :step (step-walking -0.005)
                                :exit exit-walking}}})
-
-(defn step-strafing [speed]
-  (fn [entity & more]
-    (if (physics/physical? entity)
-      (let [rotation (get entity :rotation [0 0 0 1])
-            heading (get entity :heading [0 1 0])
-            up (get entity :up [0 0 1])
-            direction (take 3
-                            (q/qmul rotation
-                                    (conj (m/cross up heading) 0)
-                                    (q/inverse rotation)))]
-        (assoc-in entity [:body :velocities :strafing]
-                  (m/mmul speed direction)))
-      entity)))
-
-(defn exit-strafing [entity & more]
-  (update-in entity [:body :velocities] dissoc :strafing))
-
 
 (def strafing
   {:name :moving/strafing
@@ -171,15 +142,11 @@
             :strafing-left {:transitions [{:pred (command-match :left/stop :right/stop)
                                            :transition :standing}
                                           {:pred (command-match :right)
-                                           :transition :strafing-right}]
-                            :step (step-strafing 0.005)
-                            :exit exit-strafing}
+                                           :transition :strafing-right}]}
             :strafing-right {:transitions [{:pred (command-match :left/stop :right/stop)
                                             :transition :standing}
                                            {:pred (command-match :left)
-                                            :transition :strafing-left}]
-                             :step (step-strafing -0.005)
-                             :exit exit-strafing}}})
+                                            :transition :strafing-left}]}}})
 (defn not-moving? [entity & more]
   (reduce-kv (fn [acc machine state]
                (if-not (and (qualified-keyword? machine)
@@ -190,10 +157,38 @@
              true
              (get entity :current-states)))
 
+(defn step-moving [speed]
+  (fn [entity & more]
+    (if (physics/physical? entity)
+      (let [rotation (get entity :rotation [0 0 0 1])
+            forward (get entity :heading [0 1 0])
+            up (get entity :up [0 0 1])
+            left (m/cross up forward)
+            heading (m/normalise (m/add (condp = (get-in entity [:current-states :moving/walking])
+                                          :walking-forward forward
+                                          :walking-backward (m/sub forward)
+                                          :standing [0 0 0])
+                                        (condp = (get-in entity [:current-states :moving/strafing])
+                                          :strafing-left left
+                                          :strafing-right (m/sub left)
+                                          :standing [0 0 0])))
+            direction (take 3
+                            (q/qmul rotation
+                                    (conj heading 0)
+                                    (q/inverse rotation)))]
+        (assoc-in entity [:body :velocities :moving]
+                  (m/mmul speed direction)))
+      entity)))
+
+(defn exit-moving [entity & more]
+  (update-in entity [:body :velocities] dissoc :moving))
+
 (def moving
   {:name :moving
    :states {:moving {:transitions [{:pred not-moving?
-                                    :transition :not-moving}]}
+                                    :transition :not-moving}]
+                     :step (step-moving 0.01)
+                     :exit exit-moving}
             :not-moving {:transitions [{:pred (comp not not-moving?)
                                         :transition :moving}]}}})
 
@@ -235,19 +230,30 @@
 
 (defn update-fsm [entity delta-t world])
 
+;;ugh hacky, but I'm rushing and want this to just work
+(defn clear-signal [location]
+  (fn [entity & more]
+    (when-let [signal (get-in entity [location])]
+      (s/propagate signal nil))
+    entity))
+
 (defn ^:export player-movement
   "Given a keymap and entity, add input-driven movement component to entity, and returns updated entity."
   [entity keymap]
-  (let [input-signal (s/map (fn [event]
-                              (if-let [command (keymap (:key event))]
-                                (if (= :down (:press event))
-                                  command
-                                  (keyword command :stop))))
-                            input/keyboard)]
+  (let [input-signal (s/foldp (fn [buffer event]
+                                (if-let [command (keymap (:key event))]
+                                  (conj buffer
+                                        (if (= :down (:press event))
+                                          command
+                                          (keyword command :stop)))
+                                  buffer))
+                              []
+                              input/keyboard)]
     ;; check if exists?
     (-> entity
         (assoc :input keymap)
-        (assoc :commands input-signal))))
+        (assoc :commands input-signal)
+        (add-behavior (clear-signal :commands)))))
 
 (defn ^:export handle-world-commands [entity delta-t world]
   (let [event-signal (get entity :events)
