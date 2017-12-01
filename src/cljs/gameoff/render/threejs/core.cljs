@@ -79,7 +79,7 @@
                                   (.set (.-position light2) 10 200 10)
                                   (.add scene light2)
                                   (.add scene (js/THREE.AmbientLight. 0xffddee))
-                                  (set! (.-background scene) (js/THREE.Color. 0x5f40fe))
+                                  (set! (.-background scene) (js/THREE.Color. 0x7073ff))
                                   (.updateMatrixWorld scene true)
                                   (.updateMatrixWorld bbhelpers true)
                                   ;;(.add scene bbhelpers)

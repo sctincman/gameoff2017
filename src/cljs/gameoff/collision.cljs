@@ -192,29 +192,34 @@
   (if-let [mass-prime (get-in prime [:body :mass])]
     (let [mass-secondary (get-in world [second-key :body :mass] js/Infinity)
           overlap (intersect-wabb (:aabb prime) (get-in world [second-key :aabb]))
-          dimensions (m/sub (maxs overlap) (mins overlap))]
-      (if (= 3 (m/zero-count dimensions))
-        prime
-        (let [center-point (m/sub (maxs overlap)
-                                  (m/mul 0.5 dimensions))
-              weight-factor (- 1 (/ mass-prime (+ mass-prime mass-secondary)))
-              direction (wabb-closest-side-normal center-point (get-in world [second-key :aabb]))
-              displacement (m/mul weight-factor
-                                  dimensions
-                                  direction)
-              ;;huge hack, but meh, game "physics", 
-              velocity-component (m/mul weight-factor
-                                        (m/dot direction
-                                               (get-in prime [:body :velocities :forces] [0 0 0]))
-                                        direction)]
-          (when (pos? (m/dot displacement
-                             (get world :up [0 0 1])))
-            (when-let [standing? (get prime :standing?)]
-              (s/propagate standing? true)))
-          (-> prime
-              (update :position m/add displacement)
-              (update-in [:body :velocities :forces] m/sub velocity-component)))))
+          dimensions (m/sub (maxs overlap) (mins overlap))
+          center-point (m/sub (maxs overlap)
+                              (m/mul 0.5 dimensions))
+          weight-factor (- 1 (/ mass-prime (+ mass-prime mass-secondary)))
+
+          direction (wabb-closest-side-normal center-point (get-in world [second-key :aabb]))
+          displacement (m/mul weight-factor
+                              dimensions
+                              direction)
+          ;;huge hack, but meh, game "physics",
+          velocity-component (m/mul weight-factor
+                                    (m/dot direction
+                                           (get-in prime [:body :velocities :forces] [0 0 0]))
+                                    direction)]
+      (when (pos? (m/dot direction
+                         (get world :up [0 0 1])))
+        (when-let [standing? (get prime :standing?)]
+          (s/propagate standing? true)))
+      (-> prime
+          (update :position m/add displacement)
+          (update-in [:body :velocities :forces] m/sub velocity-component)
+          (assoc-in [:body :v-total] (reduce m/add [0 0 0]
+                                             (vals (get-in prime [:body :velocities]))))))
     prime))
+
+(defn win-condition [prime second-key delta-t world]
+  (println "WIN!")
+  (assoc-in prime [:body :acceleration :forces] [0 0.00008 0]))
 
 (defn handle-collision
   [primary-key secondary-key world delta-t]

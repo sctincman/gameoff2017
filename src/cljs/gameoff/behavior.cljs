@@ -221,9 +221,9 @@
   (when-let [standing? (get entity :standing?)]
     (s/value standing?)))
 
-(defn falling? [entity & more]
-  (neg? (m/dot (get entity :up [0 0 1])
-               (get-in entity [:body :velocity] [0 0 0]))))
+(defn falling? [entity delta-t world]
+  (> 0.0001 (m/dot (get world :up [0 0 1])
+               (get-in entity [:body :v-total] [0 0 0]))))
 
 (defn exit-on-ground [entity & more]
   (when-let [standing? (get entity :standing?)]
@@ -248,15 +248,11 @@
 (def vertical
   {:name :vertical
    :states {:on-ground {:transitions [{:pred (command-match :jump)
-                                       :transition :jumping}
-                                      {:pred falling?
-                                       :transition :falling}]
+                                       :transition :jumping}]
                         :exit exit-on-ground}
             :jumping {:transitions [{:pred standing?
-                                     :transition :on-ground}
-                                    {:pred falling?
-                                     :transition falling?}]
-                      :enter (jump 0.059)}
+                                     :transition :on-ground}]
+                      :enter (jump 0.055)}
             :falling {:transitions [{:pred standing?
                                      :transition :on-ground}]}}})
 
@@ -284,9 +280,13 @@
     entity))
 
 (defn warp [z target]
-  (fn [entity & more]
-    (if (< (get-in entity [:position 1]) z)
-      (assoc entity :position target)
+  (fn [entity delta-t world]
+    (if (and (< (get-in entity [:position 1]) z)
+             (not (get world :clear)))
+      (-> entity
+          (assoc :position target)
+          (assoc-in [:body :accelerations :forces] [0 -0.00005 0])
+          (assoc-in [:body :velocities :forces] [0 0 0]))
       entity)))
 
 (defn ^:export player-movement
@@ -312,7 +312,7 @@
         (assoc :input keymap)
         (assoc :commands input-signal)
         (add-behavior (clear-signal :commands))
-        (add-behavior (warp -300 [2.5 20 10])))))
+        (add-behavior (warp -300 [0 50 0])))))
 
 (defn ^:export handle-world-commands [entity delta-t world]
   (let [event-signal (get entity :events)

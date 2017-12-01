@@ -18,7 +18,7 @@
          :scene {:current-scene :Scene
                  :camera :PlayerCamera}
          :Cube {:collision true}
-         :BigCube {:collision true}
+         :BigCube {:collision {:external collision/win-condition}}
          :Cylinder {:collision true}
          :Ground {:collision true}
          :groups {:BigCube {:collision true}
