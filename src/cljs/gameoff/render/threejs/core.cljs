@@ -46,6 +46,11 @@
             (when (pos? (count the-rest))
               (recur (first the-rest) (rest the-rest)))))))))
 
+(defn keyword*
+  "SMASH"
+  [string]
+  (apply keyword (clojure.string.split string "_")))
+
 (defn ^:export load-gltf
   [backend path world]
   (let [scenes (:scenes backend)
@@ -56,13 +61,13 @@
              (let [cameras
                    (into {}
                          (map (fn [child]
-                                {(keyword (str (aget child "name")))
+                                {(keyword* (str (aget child "name")))
                                  {:root child}})
                               (aget gltf "cameras")))
                    animations
                    (into {}
                          (map (fn [child]
-                                {(keyword (str (aget child "name")))
+                                {(keyword* (str (aget child "name")))
                                  {:root child}})
                               (aget gltf "animations")))
                    loaded-scenes
@@ -75,7 +80,7 @@
                                   (.updateMatrixWorld scene true)
                                   (.updateMatrixWorld bbhelpers true)
                                   ;;(.add scene bbhelpers)
-                                  {(keyword (str (aget scene "name")))
+                                  {(keyword* (str (aget scene "name")))
                                    {:root scene
                                     :mixer mixer
                                     :bounding-boxes bbhelpers
@@ -83,7 +88,7 @@
                                     (into {}
                                           (map (fn [child]
                                                  (.add bbhelpers (js/THREE.BoxHelper. child 0xff0000))
-                                                 {(keyword (str (aget child "name")))
+                                                 {(keyword* (str (aget child "name")))
                                                   {:root child}})
                                                (aget scene "children")))}}))
                               (aget gltf "scenes")))]
@@ -164,7 +169,7 @@
                  (if-let [obj (get child :root)]
                    (update world id
                            (fn [entity]
-                             (-> entity
+                             (-> (into (get-in world [:groups (keyword (namespace id))] {}) entity)
                                  (update :position
                                          (fn [pos]
                                            (if (some? pos)

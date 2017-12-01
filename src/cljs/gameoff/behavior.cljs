@@ -98,7 +98,7 @@
     (let [current-scene (get-in world [:scene :current-scene])
           scenes @(get-in world [:backend :scenes])
           mixer (get-in scenes [current-scene :mixer])
-          walk-animation (.clipAction mixer (get-in scenes [:animations :Fox_Walk :root]))]
+          walk-animation (.clipAction mixer (get-in scenes [:animations :Fox/Walk :root]))]
       (.setEffectiveWeight walk-animation weight)
       (.setEffectiveTimeScale walk-animation time-scale)
       (.play walk-animation)
@@ -109,7 +109,7 @@
   (let [current-scene (get-in world [:scene :current-scene])
         scenes @(get-in world [:backend :scenes])
         mixer (get-in scenes [current-scene :mixer])
-        walk-animation (.clipAction mixer (get-in scenes [:animations :Fox_Walk :root]))]
+        walk-animation (.clipAction mixer (get-in scenes [:animations :Fox/Walk :root]))]
     (.setEffectiveWeight walk-animation 0)
     (.stop walk-animation))
   entity)
@@ -219,7 +219,6 @@
 
 (defn standing? [entity & more]
   (when-let [standing? (get entity :standing?)]
-    (println "standing?" (s/value standing?))
     (s/value standing?)))
 
 (defn falling? [entity & more]
