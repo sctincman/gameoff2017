@@ -74,9 +74,12 @@
                    (into {}
                          (map (fn [scene]
                                 (let [mixer (js/THREE.AnimationMixer. scene)
-                                      bbhelpers (js/THREE.Group.)]
-                                  (.add scene (js/THREE.AmbientLight. 0xffffff))
-                                  (set! (.-background scene) (js/THREE.Color. 0x6c6c6c))
+                                      bbhelpers (js/THREE.Group.)
+                                      light2 (js/THREE.PointLight. 0xdd9955 0.6 0)]
+                                  (.set (.-position light2) 10 200 10)
+                                  (.add scene light2)
+                                  (.add scene (js/THREE.AmbientLight. 0xffddee))
+                                  (set! (.-background scene) (js/THREE.Color. 0x5f40fe))
                                   (.updateMatrixWorld scene true)
                                   (.updateMatrixWorld bbhelpers true)
                                   ;;(.add scene bbhelpers)

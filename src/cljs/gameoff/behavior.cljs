@@ -187,7 +187,7 @@
   {:name :moving
    :states {:moving {:transitions [{:pred not-moving?
                                     :transition :not-moving}]
-                     :step (step-moving 0.02)
+                     :step (step-moving 0.03)
                      :exit exit-moving}
             :not-moving {:transitions [{:pred (comp not not-moving?)
                                         :transition :moving}]}}})
@@ -256,7 +256,7 @@
                                      :transition :on-ground}
                                     {:pred falling?
                                      :transition falling?}]
-                      :enter (jump 0.05)}
+                      :enter (jump 0.059)}
             :falling {:transitions [{:pred standing?
                                      :transition :on-ground}]}}})
 
@@ -283,6 +283,12 @@
       (s/propagate signal nil))
     entity))
 
+(defn warp [z target]
+  (fn [entity & more]
+    (if (< (get-in entity [:position 1]) z)
+      (assoc entity :position target)
+      entity)))
+
 (defn ^:export player-movement
   "Given a keymap and entity, add input-driven movement component to entity, and returns updated entity."
   [entity keymap]
@@ -299,7 +305,8 @@
     (-> entity
         (assoc :input keymap)
         (assoc :commands input-signal)
-        (add-behavior (clear-signal :commands)))))
+        (add-behavior (clear-signal :commands))
+        (add-behavior (warp -300 [2.5 20 10])))))
 
 (defn ^:export handle-world-commands [entity delta-t world]
   (let [event-signal (get entity :events)

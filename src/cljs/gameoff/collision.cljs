@@ -136,6 +136,9 @@
                (reduce (fn [pairs first-key]
                          (reduce (fn [pairs second-key]
                                    (if (and (not (= first-key second-key))
+                                            (or (not (qualified-keyword? first-key))
+                                                (not (= (namespace first-key)
+                                                        (namespace second-key))))
                                             (aabb-intersects? (get-in world [first-key :aabb])
                                                               (get-in world [second-key :aabb])))
                                      (update pairs first-key

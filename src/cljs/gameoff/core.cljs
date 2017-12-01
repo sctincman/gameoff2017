@@ -21,7 +21,8 @@
          :BigCube {:collision true}
          :Cylinder {:collision true}
          :Ground {:collision true}
-         :groups {:BigCube {:collision true}}
+         :groups {:BigCube {:collision true}
+                  :Ground {:collision true}}
          :Fox (-> {:heading [0 1 0]
                    :up [0 0 -1]
                    :renders {}
