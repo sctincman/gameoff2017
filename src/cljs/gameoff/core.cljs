@@ -73,8 +73,7 @@
 ;; Views
 
 (defn home-page []
-  [:div [:h2 "Github Gameoff 2017"]
-   [reagent-renderer game-state]])
+  [:div [reagent-renderer game-state]])
 
 ;; -------------------------
 ;; Routes

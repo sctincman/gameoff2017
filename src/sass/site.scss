@@ -8,7 +8,8 @@ $base-font-size: 1.125em;
 
 .body-container {
   font-family: $font-stack;
-  max-width: 600px;
+  width: 100%;
+  height: 100%;
   margin: 0 auto;
   padding-top: 72px;
   -webkit-font-smoothing: antialiased;
@@ -45,5 +46,5 @@ a {
 
 .gameview {
     width: 100%;
-    height: 500px;
+    height: 100%;
 }

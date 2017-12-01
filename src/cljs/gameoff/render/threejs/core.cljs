@@ -156,9 +156,9 @@
 (defn- update-object
   [entity mesh]
   (if-let [[x y z] (:position entity)]
-    (.set (.-position mesh) x y z))
+    (.set (aget mesh "position") x y z))
   (when-let [[x y z w] (:rotation entity)]
-    (.set (.-quaternion mesh) x y z w)))
+    (.set (aget mesh "quaternion") x y z w)))
 
 (defn ^:export update-entities
   "Because GRRR. Allow using values from GLTF without needing to specify in state. Called from :external-loaded handler"
@@ -223,8 +223,7 @@
    (doto (js/THREE.WebGLRenderer. #js {:antialias true})
      (.setPixelRatio js/window.devicePixelRatio)))
   ([element]
-   (doto (js/THREE.WebGLRenderer. #js {:canvas element :antialias true})
-     (.setPixelRatio js/window.devicePixelRatio))))
+   (js/THREE.WebGLRenderer. #js {:canvas element :antialias true})))
 
 (defn- on-ready [backend]
   (fn [event]
