@@ -292,16 +292,22 @@
 (defn ^:export player-movement
   "Given a keymap and entity, add input-driven movement component to entity, and returns updated entity."
   [entity keymap]
-  (let [input-signal (s/foldp (fn [buffer event]
-                                (if-let [command (keymap (:key event))]
-                                  (conj buffer
-                                        (if (= :down (:press event))
-                                          command
-                                          (keyword command :stop)))
-                                  buffer))
-                              []
-                              input/keyboard)]
-    ;; check if exists?
+  (let [input-signal (s/signal nil "keyboard")]
+    (.addEventListener
+     js/document
+     "keydown"
+     (fn [event]
+       (when-let [command (keymap (.-key event))]
+         (.preventDefault event)
+         (s/propagate input-signal (conj (s/value input-signal) command)))))
+    (.addEventListener
+     js/document
+     "keyup"
+     (fn [event]
+       (when-let [command (keymap (.-key event))]
+         (.preventDefault event)
+         (s/propagate input-signal (conj (s/value input-signal) (keyword command :stop))))))
+
     (-> entity
         (assoc :input keymap)
         (assoc :commands input-signal)
